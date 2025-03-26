@@ -176,7 +176,7 @@ void Renderer::renderMeshWithMaterial(const Matrix44 model, GFX::Mesh* mesh, SCN
 	//in case there is nothing to do
 	if (!mesh || !mesh->getNumVertices() || !material )
 		return;
-    assert(glGetError() == GL_NO_ERROR);
+	assert(glGetError() == GL_NO_ERROR);
 
 	//define locals to simplify coding
 	GFX::Shader* shader = NULL;
@@ -187,7 +187,7 @@ void Renderer::renderMeshWithMaterial(const Matrix44 model, GFX::Mesh* mesh, SCN
 	//chose a shader
 	shader = GFX::Shader::Get("texture");
 
-    assert(glGetError() == GL_NO_ERROR);
+	assert(glGetError() == GL_NO_ERROR);
 
 	//no shader? then nothing to render
 	if (!shader)
