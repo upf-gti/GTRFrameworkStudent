@@ -17,6 +17,13 @@
 
 #include "scene.h"
 
+struct sDrawCommand {
+	GFX::Mesh* mesh;
+	SCN::Material* material;
+	Matrix44 model;
+};
+
+std::vector<sDrawCommand> draw_command_list;
 
 using namespace SCN;
 
@@ -46,6 +53,26 @@ void Renderer::setupScene()
 		skybox_cubemap = nullptr;
 }
 
+void parseNodes(SCN::Node* node, Camera* cam) {
+	if (!node) {
+		return;
+	}
+
+	if (node->mesh) {
+
+		sDrawCommand draw_com;
+		draw_com.mesh = node->mesh;
+		draw_com.material = node->material;
+		draw_com.model = node->getGlobalMatrix();
+
+		draw_command_list.push_back(draw_com);
+	}
+
+	for (SCN::Node* child : node->children) {
+		parseNodes(child, cam);
+	}
+}
+
 void Renderer::parseSceneEntities(SCN::Scene* scene, Camera* cam) {
 	// HERE =====================
 	// TODO: GENERATE RENDERABLES
@@ -58,6 +85,9 @@ void Renderer::parseSceneEntities(SCN::Scene* scene, Camera* cam) {
 			continue;
 		}
 
+		if (entity->getType() == eEntityType::PREFAB) {
+			parseNodes(&((PrefabEntity*)entity)->root, cam);
+		}
 		// Store Prefab Entitys
 		// ...
 		//		Store Children Prefab Entities
@@ -65,7 +95,7 @@ void Renderer::parseSceneEntities(SCN::Scene* scene, Camera* cam) {
 		// Store Lights
 		// ...
 	}
-	
+
 }
 
 void Renderer::renderScene(SCN::Scene* scene, Camera* camera)
@@ -83,12 +113,16 @@ void Renderer::renderScene(SCN::Scene* scene, Camera* camera)
 	GFX::checkGLErrors();
 
 	//render skybox
-	if(skybox_cubemap)
+	if (skybox_cubemap)
 		renderSkybox(skybox_cubemap);
 
 	// HERE =====================
 	// TODO: RENDER RENDERABLES
 	// ==========================
+
+	for (sDrawCommand command : draw_command_list) {
+		Renderer::renderMeshWithMaterial(command.model, command.mesh, command.material);
+	}
 }
 
 
@@ -136,9 +170,9 @@ void Renderer::renderSkybox(GFX::Texture* cubemap)
 void Renderer::renderMeshWithMaterial(const Matrix44 model, GFX::Mesh* mesh, SCN::Material* material)
 {
 	//in case there is nothing to do
-	if (!mesh || !mesh->getNumVertices() || !material )
+	if (!mesh || !mesh->getNumVertices() || !material)
 		return;
-    assert(glGetError() == GL_NO_ERROR);
+	assert(glGetError() == GL_NO_ERROR);
 
 	//define locals to simplify coding
 	GFX::Shader* shader = NULL;
@@ -149,7 +183,7 @@ void Renderer::renderMeshWithMaterial(const Matrix44 model, GFX::Mesh* mesh, SCN
 	//chose a shader
 	shader = GFX::Shader::Get("texture");
 
-    assert(glGetError() == GL_NO_ERROR);
+	assert(glGetError() == GL_NO_ERROR);
 
 	//no shader? then nothing to render
 	if (!shader)
@@ -167,11 +201,11 @@ void Renderer::renderMeshWithMaterial(const Matrix44 model, GFX::Mesh* mesh, SCN
 
 	// Upload time, for cool shader effects
 	float t = getTime();
-	shader->setUniform("u_time", t );
+	shader->setUniform("u_time", t);
 
 	// Render just the verticies as a wireframe
 	if (render_wireframe)
-		glPolygonMode( GL_FRONT_AND_BACK, GL_LINE );
+		glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
 
 	//do the draw call that renders the mesh into the screen
 	mesh->render(GL_TRIANGLES);
@@ -181,14 +215,14 @@ void Renderer::renderMeshWithMaterial(const Matrix44 model, GFX::Mesh* mesh, SCN
 
 	//set the render state as it was before to avoid problems with future renders
 	glDisable(GL_BLEND);
-	glPolygonMode( GL_FRONT_AND_BACK, GL_FILL );
+	glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
 }
 
 #ifndef SKIP_IMGUI
 
 void Renderer::showUI()
 {
-		
+
 	ImGui::Checkbox("Wireframe", &render_wireframe);
 	ImGui::Checkbox("Boundaries", &render_boundaries);
 
