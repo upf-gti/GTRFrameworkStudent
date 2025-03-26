@@ -119,17 +119,17 @@ void Renderer::parseSceneEntities(SCN::Scene* scene, Camera* cam) {
 		}
 	}
 
-	// camera center is used to sort both opaque and transparent entities
-	Vector3f cc = cam->center;
+	// camera eye is used to sort both opaque and transparent entities
+	Vector3f ce = cam->eye;
 
 	// sort opaque entities in ascending order (front to back)
-	std::sort(draw_commands_opaque.begin(), draw_commands_opaque.end(), [&cc](s_DrawCommand& a, s_DrawCommand& b) {
-		return a.model.getTranslation().distance(cc) < b.model.getTranslation().distance(cc);
+	std::sort(draw_commands_opaque.begin(), draw_commands_opaque.end(), [&ce](s_DrawCommand& a, s_DrawCommand& b) {
+		return a.model.getTranslation().distance(ce) < b.model.getTranslation().distance(ce);
 		});
 
 	// sort transparent entities in descending order (back to front)
-	std::sort(draw_commands_transp.begin(), draw_commands_transp.end(), [&cc](s_DrawCommand& a, s_DrawCommand& b) {
-		return a.model.getTranslation().distance(cc) > b.model.getTranslation().distance(cc);
+	std::sort(draw_commands_transp.begin(), draw_commands_transp.end(), [&ce](s_DrawCommand& a, s_DrawCommand& b) {
+		return a.model.getTranslation().distance(ce) > b.model.getTranslation().distance(ce);
 		});
 }
 
