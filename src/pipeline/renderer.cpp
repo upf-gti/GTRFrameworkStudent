@@ -1,6 +1,6 @@
 #include "renderer.h"
 
-#include <algorithm> //sort
+#include <algorithm> // sort
 
 #include "camera.h"
 #include "../gfx/gfx.h"
@@ -46,28 +46,38 @@ void Renderer::setupScene()
 		skybox_cubemap = nullptr;
 }
 
-void Renderer::parseNodes(SCN::Node* node, Camera* cam) {
+void Renderer::parseNodes(SCN::Node* node, Camera* cam)
+{
 	if (!node) return;
 
-	// Store Children Prefab Entities
+	// parse all nodes including children
 	for (SCN::Node* child : node->children) {
 		parseNodes(child, cam);
 	}
 
 	if (!node->mesh) return;
 
+	// start rustum culling
+	bool in_frustum = cam->testBoxInFrustum(node->aabb.center, node->aabb.halfsize); // note: aabb is the bounding box
+
+	if (!in_frustum) return;
+	// end rustum culling
+
+	// since we will draw it for sure we create the renderable
 	s_DrawCommand draw_command{
 			node->getGlobalMatrix(),
 			node->mesh,
 			node->material
 	};
 
+	// start transparencies
 	if (node->isTransparent()) {
 		draw_commands_transp.push_back(draw_command);
 	}
 	else {
 		draw_commands_opaque.push_back(draw_command);
 	}
+	// end transparencies
 }
 
 void Renderer::parseSceneEntities(SCN::Scene* scene, Camera* cam) {
@@ -90,11 +100,11 @@ void Renderer::parseSceneEntities(SCN::Scene* scene, Camera* cam) {
 		{
 		case eEntityType::PREFAB:
 		{
-			// Store Prefab Entities
+			// once we know it is a PREFAB entity perform static cast
 			PrefabEntity* prefab_entity = static_cast<PrefabEntity*>(entity);
 
+			// parse all nodes (including children)
 			parseNodes(&prefab_entity->root, cam);
-
 			break;
 		}
 		case eEntityType::LIGHT:
@@ -109,7 +119,7 @@ void Renderer::parseSceneEntities(SCN::Scene* scene, Camera* cam) {
 		}
 	}
 
-	// camera position is used to sort both opaque and transparent entities
+	// camera center is used to sort both opaque and transparent entities
 	Vector3f cc = cam->center;
 
 	// sort opaque entities in ascending order (front to back)
@@ -117,7 +127,7 @@ void Renderer::parseSceneEntities(SCN::Scene* scene, Camera* cam) {
 		return a.model.getTranslation().distance(cc) < b.model.getTranslation().distance(cc);
 		});
 
-	// sort transparent entities in descending order (back to front)s
+	// sort transparent entities in descending order (back to front)
 	std::sort(draw_commands_transp.begin(), draw_commands_transp.end(), [&cc](s_DrawCommand& a, s_DrawCommand& b) {
 		return a.model.getTranslation().distance(cc) > b.model.getTranslation().distance(cc);
 		});
@@ -145,14 +155,12 @@ void Renderer::renderScene(SCN::Scene* scene, Camera* camera)
 	// TODO: RENDER RENDERABLES
 	// ==========================
 
-	// first opaque
-	// TODO: ASK TEACHER IF FIRST OPAQUE OR TRANSPARENT
-	// this way looks good, but in diapos reversed (P1)
+	// first render opaque entities
 	for (s_DrawCommand command : draw_commands_opaque) {
 		renderMeshWithMaterial(command.model, command.mesh, command.material);
 	}
 
-	// then transparent
+	// then render transparent entities
 	for (s_DrawCommand command : draw_commands_transp) {
 		renderMeshWithMaterial(command.model, command.mesh, command.material);
 	}

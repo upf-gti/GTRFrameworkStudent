@@ -18,6 +18,7 @@ namespace SCN {
 	class Prefab;
 	class Material;
 
+	// minimal information for a draw call of a node
 	struct s_DrawCommand {
 		Matrix44 model;
 		GFX::Mesh* mesh;
@@ -36,7 +37,7 @@ namespace SCN {
 
 		SCN::Scene* scene;
 
-		// setup renderables
+		// setup opaque and transparent renderables
 		std::vector<SCN::s_DrawCommand> draw_commands_opaque;
 		std::vector<SCN::s_DrawCommand> draw_commands_transp;
 
@@ -62,5 +63,4 @@ namespace SCN {
 		// Recursively iterate over all children of a node, adding the needed ones to renderables list
 		void parseNodes(SCN::Node* node, Camera* cam);
 	};
-
 };
