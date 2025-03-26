@@ -17,6 +17,14 @@
 
 #include "scene.h"
 
+// Generate the renderer call struct
+struct sDrawCommand {
+	GFX::Mesh* mesh;
+	SCN::Material* material;
+	Matrix44 model;
+};
+
+std::vector<sDrawCommand> draw_command_list;
 
 using namespace SCN;
 
@@ -46,16 +54,43 @@ void Renderer::setupScene()
 		skybox_cubemap = nullptr;
 }
 
-void Renderer::parseSceneEntities(SCN::Scene* scene, Camera* cam) {
+void Renderer::parseNode(SCN::Node* node, Camera* cam)
+{
+	if (!node) {
+		return;
+	}
+	
+	if (node->mesh) {
+		sDrawCommand draw_command;
+		draw_command.mesh = node->mesh;
+		draw_command.material = node->material;
+		draw_command.model = node->getGlobalMatrix();
+		draw_command_list.push_back(draw_command);
+	}
+
+	// RECURSION
+	for (SCN::Node* child : node->children) {
+		parseNode(child, cam);
+	}
+}
+
+void Renderer::parseSceneEntities(SCN::Scene* scene, Camera* cam) 
+{
 	// HERE =====================
 	// TODO: GENERATE RENDERABLES
 	// ==========================
+	draw_command_list.clear();
 
 	for (int i = 0; i < scene->entities.size(); i++) {
 		BaseEntity* entity = scene->entities[i];
 
 		if (!entity->visible) {
 			continue;
+		}
+	
+		if (entity->getType() == eEntityType::PREFAB) {
+			PrefabEntity* prefab_entity = (PrefabEntity*)entity;
+			parseNode(&prefab_entity->root, cam);
 		}
 
 		// Store Prefab Entitys
@@ -83,12 +118,17 @@ void Renderer::renderScene(SCN::Scene* scene, Camera* camera)
 	GFX::checkGLErrors();
 
 	//render skybox
-	if(skybox_cubemap)
+	if (skybox_cubemap) {
 		renderSkybox(skybox_cubemap);
+	}
 
 	// HERE =====================
 	// TODO: RENDER RENDERABLES
 	// ==========================
+	for (sDrawCommand draw_command : draw_command_list) {
+		renderMeshWithMaterial(draw_command.model, draw_command.mesh, draw_command.material);
+	}
+		
 }
 
 

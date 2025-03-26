@@ -2,6 +2,7 @@
 OpenGL C++ Framework used for teach the Real-time Grapchics course at Universitat Pompeu Fabra.
 
 Framework by Javier Agenjo.
+Group: Marc Bosch Manzano & Dídac Hierro Sotero.
 
 ## Building
 
@@ -17,7 +18,7 @@ Building requirements are
 
 Once you have all required open a Windows Terminal, go to the project folder and do this steps:
 ```console
-cd CGFrameworkStudent
+cd GTRrameworkStudent
 mkdir build
 cd build
 cmake ..

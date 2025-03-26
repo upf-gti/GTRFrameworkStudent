@@ -38,6 +38,7 @@ namespace SCN {
 
 		//add here your functions
 		//...
+		void parseNode(SCN::Node* node, Camera* cam);
 
 		void parseSceneEntities(SCN::Scene* scene, Camera* camera);
 
