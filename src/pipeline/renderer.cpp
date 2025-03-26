@@ -56,11 +56,18 @@ void Renderer::parseNodes(SCN::Node* node, Camera* cam) {
 
 	if (!node->mesh) return;
 
-	drawCommands.push_back(s_DrawCommand{
-		node->getGlobalMatrix(),
-		node->mesh,
-		node->material
-	});
+	s_DrawCommand draw_command{
+			node->getGlobalMatrix(),
+			node->mesh,
+			node->material
+	};
+
+	if (node->isTransparent()) {
+		draw_commands_transp.push_back(draw_command);
+	}
+	else {
+		draw_commands_opaque.push_back(draw_command);
+	}
 }
 
 void Renderer::parseSceneEntities(SCN::Scene* scene, Camera* cam) {
@@ -69,7 +76,8 @@ void Renderer::parseSceneEntities(SCN::Scene* scene, Camera* cam) {
 	// ==========================
 
 	// important to clear the list in each pass
-	drawCommands.clear();
+	draw_commands_opaque.clear();
+	draw_commands_transp.clear();
 
 	for (int i = 0; i < scene->entities.size(); i++) {
 		BaseEntity* entity = scene->entities[i];
@@ -82,11 +90,10 @@ void Renderer::parseSceneEntities(SCN::Scene* scene, Camera* cam) {
 		{
 		case eEntityType::PREFAB:
 		{
-			// Store Prefab Entitys
+			// Store Prefab Entities
 			PrefabEntity* prefab_entity = static_cast<PrefabEntity*>(entity);
-			Prefab* prefab = prefab_entity->prefab;
 
-			parseNodes(&prefab->root, cam);
+			parseNodes(&prefab_entity->root, cam);
 
 			break;
 		}
@@ -101,6 +108,19 @@ void Renderer::parseSceneEntities(SCN::Scene* scene, Camera* cam) {
 			break;
 		}
 	}
+
+	// camera position is used to sort both opaque and transparent entities
+	Vector3f cc = cam->center;
+
+	// sort opaque entities in ascending order (front to back)
+	std::sort(draw_commands_opaque.begin(), draw_commands_opaque.end(), [&cc](s_DrawCommand& a, s_DrawCommand& b) {
+		return a.model.getTranslation().distance(cc) < b.model.getTranslation().distance(cc);
+		});
+
+	// sort transparent entities in descending order (back to front)s
+	std::sort(draw_commands_transp.begin(), draw_commands_transp.end(), [&cc](s_DrawCommand& a, s_DrawCommand& b) {
+		return a.model.getTranslation().distance(cc) > b.model.getTranslation().distance(cc);
+		});
 }
 
 void Renderer::renderScene(SCN::Scene* scene, Camera* camera)
@@ -124,7 +144,16 @@ void Renderer::renderScene(SCN::Scene* scene, Camera* camera)
 	// HERE =====================
 	// TODO: RENDER RENDERABLES
 	// ==========================
-	for (s_DrawCommand command : drawCommands) {
+
+	// first opaque
+	// TODO: ASK TEACHER IF FIRST OPAQUE OR TRANSPARENT
+	// this way looks good, but in diapos reversed (P1)
+	for (s_DrawCommand command : draw_commands_opaque) {
+		renderMeshWithMaterial(command.model, command.mesh, command.material);
+	}
+
+	// then transparent
+	for (s_DrawCommand command : draw_commands_transp) {
 		renderMeshWithMaterial(command.model, command.mesh, command.material);
 	}
 }

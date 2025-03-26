@@ -37,17 +37,14 @@ namespace SCN {
 		SCN::Scene* scene;
 
 		// setup renderables
-		std::vector<SCN::s_DrawCommand> drawCommands;
+		std::vector<SCN::s_DrawCommand> draw_commands_opaque;
+		std::vector<SCN::s_DrawCommand> draw_commands_transp;
 
 		//updated every frame
 		Renderer(const char* shaders_atlas_filename );
 
 		//just to be sure we have everything ready for the rendering
 		void setupScene();
-
-		//add here your functions
-		//...
-		void parseNodes(SCN::Node* node, Camera* cam);
 
 		void parseSceneEntities(SCN::Scene* scene, Camera* camera);
 
@@ -61,6 +58,9 @@ namespace SCN {
 		void renderMeshWithMaterial(const Matrix44 model, GFX::Mesh* mesh, SCN::Material* material);
 
 		void showUI();
+		
+		// Recursively iterate over all children of a node, adding the needed ones to renderables list
+		void parseNodes(SCN::Node* node, Camera* cam);
 	};
 
 };

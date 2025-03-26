@@ -148,6 +148,14 @@ void Node::operator = (const Node& node)
 	}
 }
 
+bool SCN::Node::isTransparent() const
+{
+	if (material->alpha_mode == NO_ALPHA) {
+		return false;
+	}
+	return true;
+}
+
 Prefab::Prefab()
 {
 }

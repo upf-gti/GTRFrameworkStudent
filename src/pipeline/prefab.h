@@ -80,6 +80,9 @@ namespace SCN {
 		Vector3f localToGlobal(Vector3f v) { return global_model * v; }
 
 		void operator = (const Node& node);
+
+		// tells if an object has a material with alpha != 1
+		bool isTransparent() const;
 	};
 
 	//a Prefab represent a set of objects in a tree structure
