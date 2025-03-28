@@ -7,7 +7,7 @@ Framework by Javier Agenjo.
 
 Clone and initialize the repository:
 ```
-git clone --recurse-submodules -j8 https://github.com/upf-gti/GTRFrameworkStudent.git
+git clone --recurse-submodules -j8 https://github.com/LucaFranceschi01/GTR-2025.git
 ```
 ## Windows
 Building requirements are
