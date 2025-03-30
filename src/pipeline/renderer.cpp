@@ -17,15 +17,6 @@
 
 #include "scene.h"
 
-// Generate the renderer call struct
-struct sDrawCommand {
-	GFX::Mesh* mesh;
-	SCN::Material* material;
-	Matrix44 model;
-};
-
-std::vector<sDrawCommand> draw_command_list;
-
 using namespace SCN;
 
 //some globals
@@ -65,7 +56,14 @@ void Renderer::parseNode(SCN::Node* node, Camera* cam)
 		draw_command.mesh = node->mesh;
 		draw_command.material = node->material;
 		draw_command.model = node->getGlobalMatrix();
-		draw_command_list.push_back(draw_command);
+
+		if (node->material->alpha_mode == NO_ALPHA) {
+			draw_command_opaque_list.push_back(draw_command);
+		}
+		else {
+			draw_command_transparent_list.push_back(draw_command);
+		}
+		
 	}
 
 	// RECURSION
@@ -79,7 +77,8 @@ void Renderer::parseSceneEntities(SCN::Scene* scene, Camera* cam)
 	// HERE =====================
 	// TODO: GENERATE RENDERABLES
 	// ==========================
-	draw_command_list.clear();
+	draw_command_opaque_list.clear();
+	draw_command_transparent_list.clear();
 
 	for (int i = 0; i < scene->entities.size(); i++) {
 		BaseEntity* entity = scene->entities[i];
@@ -125,9 +124,36 @@ void Renderer::renderScene(SCN::Scene* scene, Camera* camera)
 	// HERE =====================
 	// TODO: RENDER RENDERABLES
 	// ==========================
-	for (sDrawCommand draw_command : draw_command_list) {
+	
+	// Sort opaque objects from nearest to farthest
+	std::sort(draw_command_opaque_list.begin(), draw_command_opaque_list.end(),
+		[&](const sDrawCommand& a, const sDrawCommand& b) {
+			float distA = (camera->eye - a.model.getTranslation()).length();
+			float distB = (camera->eye - b.model.getTranslation()).length();
+			return distA < distB; // Closest first
+		});
+
+	// Sort transparent objects from farthest to nearest
+	std::sort(draw_command_transparent_list.begin(), draw_command_transparent_list.end(),
+		[&](const sDrawCommand& a, const sDrawCommand& b) {
+			float distA = (camera->eye - a.model.getTranslation()).length();
+			float distB = (camera->eye - b.model.getTranslation()).length();
+			return distA > distB; // Farthest first
+		});
+
+
+	for (sDrawCommand draw_command : draw_command_opaque_list) {
 		renderMeshWithMaterial(draw_command.model, draw_command.mesh, draw_command.material);
 	}
+
+	glEnable(GL_BLEND);
+	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+	for (sDrawCommand draw_command : draw_command_transparent_list) {
+		renderMeshWithMaterial(draw_command.model, draw_command.mesh, draw_command.material);
+	}
+
+	glDisable(GL_BLEND);
 		
 }
 

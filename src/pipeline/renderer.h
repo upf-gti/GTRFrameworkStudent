@@ -18,6 +18,14 @@ namespace SCN {
 	class Prefab;
 	class Material;
 
+	// Generate the renderer call struct
+	struct sDrawCommand {
+		GFX::Mesh* mesh;
+		SCN::Material* material;
+		Matrix44 model;
+	};
+
+
 	// This class is in charge of rendering anything in our system.
 	// Separating the render from anything else makes the code cleaner
 	class Renderer
@@ -25,6 +33,9 @@ namespace SCN {
 	public:
 		bool render_wireframe;
 		bool render_boundaries;
+
+		std::vector<sDrawCommand> draw_command_opaque_list;
+		std::vector<sDrawCommand> draw_command_transparent_list;
 
 		GFX::Texture* skybox_cubemap;
 
