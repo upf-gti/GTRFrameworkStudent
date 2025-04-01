@@ -17,19 +17,12 @@
 
 #include "scene.h"
 
-// Generate the renderer call struct
-struct sDrawCommand {
-	GFX::Mesh* mesh;
-	SCN::Material* material;
-	Matrix44 model;
-};
-
-std::vector<sDrawCommand> draw_command_list;
 
 using namespace SCN;
 
 //some globals
 GFX::Mesh sphere;
+
 
 Renderer::Renderer(const char* shader_atlas_filename)
 {
@@ -65,12 +58,12 @@ void Renderer::parseNode(SCN::Node* node, Camera* cam)
 		draw_command.mesh = node->mesh;
 		draw_command.material = node->material;
 		draw_command.model = node->getGlobalMatrix();
-		draw_command_list.push_back(draw_command);
+		this->draw_command_list.push_back(draw_command);
 	}
 
-	// RECURSION
+	// Store Children Prefab Entities
 	for (SCN::Node* child : node->children) {
-		parseNode(child, cam);
+		this->parseNode(child, cam);
 	}
 }
 
@@ -79,7 +72,7 @@ void Renderer::parseSceneEntities(SCN::Scene* scene, Camera* cam)
 	// HERE =====================
 	// TODO: GENERATE RENDERABLES
 	// ==========================
-	draw_command_list.clear();
+	this->draw_command_list.clear();
 
 	for (int i = 0; i < scene->entities.size(); i++) {
 		BaseEntity* entity = scene->entities[i];
@@ -88,27 +81,24 @@ void Renderer::parseSceneEntities(SCN::Scene* scene, Camera* cam)
 			continue;
 		}
 	
+		// Store Prefab Entities
 		if (entity->getType() == eEntityType::PREFAB) {
 			PrefabEntity* prefab_entity = (PrefabEntity*)entity;
-			parseNode(&prefab_entity->root, cam);
+			this->parseNode(&prefab_entity->root, cam);
+			
+			//this->draw_command_list.at(0).model.getXYZ();
 		}
-
-		// Store Prefab Entitys
-		// ...
-		//		Store Children Prefab Entities
 
 		// Store Lights
 		// ...
 	}
-	
 }
 
 void Renderer::renderScene(SCN::Scene* scene, Camera* camera)
 {
 	this->scene = scene;
-	setupScene();
-
-	parseSceneEntities(scene, camera);
+	this->setupScene();
+	this->parseSceneEntities(scene, camera);
 
 	//set the clear color (the background color)
 	glClearColor(scene->background_color.x, scene->background_color.y, scene->background_color.z, 1.0);
@@ -125,10 +115,9 @@ void Renderer::renderScene(SCN::Scene* scene, Camera* camera)
 	// HERE =====================
 	// TODO: RENDER RENDERABLES
 	// ==========================
-	for (sDrawCommand draw_command : draw_command_list) {
-		renderMeshWithMaterial(draw_command.model, draw_command.mesh, draw_command.material);
+	for (sDrawCommand draw_command : this->draw_command_list) {
+		this->renderMeshWithMaterial(draw_command.model, draw_command.mesh, draw_command.material);
 	}
-		
 }
 
 

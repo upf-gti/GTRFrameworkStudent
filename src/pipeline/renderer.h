@@ -15,6 +15,13 @@ namespace GFX {
 
 namespace SCN {
 
+	// Generate the renderer call struct
+	struct sDrawCommand {
+		GFX::Mesh* mesh;
+		SCN::Material* material;
+		Matrix44 model;
+	};
+
 	class Prefab;
 	class Material;
 
@@ -25,10 +32,9 @@ namespace SCN {
 	public:
 		bool render_wireframe;
 		bool render_boundaries;
-
 		GFX::Texture* skybox_cubemap;
-
 		SCN::Scene* scene;
+		std::vector<sDrawCommand> draw_command_list;
 
 		//updated every frame
 		Renderer(const char* shaders_atlas_filename );
