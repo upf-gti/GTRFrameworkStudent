@@ -22,6 +22,7 @@ using namespace SCN;
 //some globals
 GFX::Mesh sphere;
 
+
 Renderer::Renderer(const char* shader_atlas_filename)
 {
 	render_wireframe = false;
@@ -58,17 +59,17 @@ void Renderer::parseNode(SCN::Node* node, Camera* cam)
 		draw_command.model = node->getGlobalMatrix();
 
 		if (node->material->alpha_mode == NO_ALPHA) {
-			draw_command_opaque_list.push_back(draw_command);
+			this->draw_command_opaque_list.push_back(draw_command);
 		}
 		else {
-			draw_command_transparent_list.push_back(draw_command);
+			this->draw_command_transparent_list.push_back(draw_command);
 		}
 		
 	}
 
-	// RECURSION
+	// Store Children Prefab Entities
 	for (SCN::Node* child : node->children) {
-		parseNode(child, cam);
+		this->parseNode(child, cam);
 	}
 }
 
@@ -77,8 +78,8 @@ void Renderer::parseSceneEntities(SCN::Scene* scene, Camera* cam)
 	// HERE =====================
 	// TODO: GENERATE RENDERABLES
 	// ==========================
-	draw_command_opaque_list.clear();
-	draw_command_transparent_list.clear();
+	this->draw_command_opaque_list.clear();
+	this->draw_command_transparent_list.clear();
 
 	for (int i = 0; i < scene->entities.size(); i++) {
 		BaseEntity* entity = scene->entities[i];
@@ -87,27 +88,24 @@ void Renderer::parseSceneEntities(SCN::Scene* scene, Camera* cam)
 			continue;
 		}
 	
+		// Store Prefab Entities
 		if (entity->getType() == eEntityType::PREFAB) {
 			PrefabEntity* prefab_entity = (PrefabEntity*)entity;
-			parseNode(&prefab_entity->root, cam);
+			this->parseNode(&prefab_entity->root, cam);
+			
+			//this->draw_command_list.at(0).model.getXYZ();
 		}
-
-		// Store Prefab Entitys
-		// ...
-		//		Store Children Prefab Entities
 
 		// Store Lights
 		// ...
 	}
-	
 }
 
 void Renderer::renderScene(SCN::Scene* scene, Camera* camera)
 {
 	this->scene = scene;
-	setupScene();
-
-	parseSceneEntities(scene, camera);
+	this->setupScene();
+	this->parseSceneEntities(scene, camera);
 
 	//set the clear color (the background color)
 	glClearColor(scene->background_color.x, scene->background_color.y, scene->background_color.z, 1.0);
@@ -126,7 +124,7 @@ void Renderer::renderScene(SCN::Scene* scene, Camera* camera)
 	// ==========================
 	
 	// Sort opaque objects from nearest to farthest
-	std::sort(draw_command_opaque_list.begin(), draw_command_opaque_list.end(),
+	std::sort(this->draw_command_opaque_list.begin(), this->draw_command_opaque_list.end(),
 		[&](const sDrawCommand& a, const sDrawCommand& b) {
 			float distA = (camera->eye - a.model.getTranslation()).length();
 			float distB = (camera->eye - b.model.getTranslation()).length();
@@ -134,7 +132,7 @@ void Renderer::renderScene(SCN::Scene* scene, Camera* camera)
 		});
 
 	// Sort transparent objects from farthest to nearest
-	std::sort(draw_command_transparent_list.begin(), draw_command_transparent_list.end(),
+	std::sort(this->draw_command_transparent_list.begin(), this->draw_command_transparent_list.end(),
 		[&](const sDrawCommand& a, const sDrawCommand& b) {
 			float distA = (camera->eye - a.model.getTranslation()).length();
 			float distB = (camera->eye - b.model.getTranslation()).length();
@@ -142,15 +140,15 @@ void Renderer::renderScene(SCN::Scene* scene, Camera* camera)
 		});
 
 
-	for (sDrawCommand draw_command : draw_command_opaque_list) {
+	for (sDrawCommand draw_command : this->draw_command_opaque_list) {
 		renderMeshWithMaterial(draw_command.model, draw_command.mesh, draw_command.material);
 	}
 
 	glEnable(GL_BLEND);
 	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
-	for (sDrawCommand draw_command : draw_command_transparent_list) {
-		renderMeshWithMaterial(draw_command.model, draw_command.mesh, draw_command.material);
+	for (sDrawCommand draw_command : this->draw_command_transparent_list) {
+		this->renderMeshWithMaterial(draw_command.model, draw_command.mesh, draw_command.material);
 	}
 
 	glDisable(GL_BLEND);

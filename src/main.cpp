@@ -5,13 +5,18 @@
 	 + It also contains the mainloop
 	 + This is the lowest level, here we access the system to create the opengl Context
 	 + It takes all the events from SDL and redirect them to the application
+
+	Dídac Hierro Soteras
+	Marc Bosch Manzano
+
+	Object Properties: texture, material, mesh
+	Liht information
+	Light transport simulation
+	Light sensors and lens
 */
 
 #include "litengine.h"
-
 #include "application.h"
-
-
 #include <iostream> //to output
 
 Application* app = NULL;
