@@ -25,10 +25,10 @@ GFX::Mesh sphere;
 
 Renderer::Renderer(const char* shader_atlas_filename)
 {
-	render_wireframe = false;
-	render_boundaries = false;
-	scene = nullptr;
-	skybox_cubemap = nullptr;
+	this->render_wireframe = false;
+	this->render_boundaries = false;
+	this->scene = nullptr;
+	this->skybox_cubemap = nullptr;
 
 	if (!GFX::Shader::LoadAtlas(shader_atlas_filename))
 		exit(1);
@@ -40,10 +40,13 @@ Renderer::Renderer(const char* shader_atlas_filename)
 
 void Renderer::setupScene()
 {
-	if (scene->skybox_filename.size())
-		skybox_cubemap = GFX::Texture::Get(std::string(scene->base_folder + "/" + scene->skybox_filename).c_str());
-	else
-		skybox_cubemap = nullptr;
+	if (this->scene->skybox_filename.size()) {
+		std::string filename = this->scene->base_folder + "/" + this->scene->skybox_filename;
+		this->skybox_cubemap = GFX::Texture::Get(filename.c_str());
+	}
+	else {
+		this->skybox_cubemap = nullptr;
+	}
 }
 
 void Renderer::parseNode(SCN::Node* node, Camera* cam)
@@ -90,10 +93,7 @@ void Renderer::parseSceneEntities(SCN::Scene* scene, Camera* cam)
 	
 		// Store Prefab Entities
 		if (entity->getType() == eEntityType::PREFAB) {
-			PrefabEntity* prefab_entity = (PrefabEntity*)entity;
-			this->parseNode(&prefab_entity->root, cam);
-			
-			//this->draw_command_list.at(0).model.getXYZ();
+			this->parseNode(&((PrefabEntity*)entity)->root, cam);
 		}
 
 		// Store Lights
@@ -115,8 +115,8 @@ void Renderer::renderScene(SCN::Scene* scene, Camera* camera)
 	GFX::checkGLErrors();
 
 	//render skybox
-	if (skybox_cubemap) {
-		renderSkybox(skybox_cubemap);
+	if (this->skybox_cubemap) {
+		this->renderSkybox(this->skybox_cubemap);
 	}
 
 	// HERE =====================
@@ -167,7 +167,7 @@ void Renderer::renderSkybox(GFX::Texture* cubemap)
 	glDisable(GL_DEPTH_TEST);
 	glDisable(GL_CULL_FACE);
 
-	if (render_wireframe)
+	if (this->render_wireframe)
 		glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
 
 	GFX::Shader* shader = GFX::Shader::Get("skybox");
@@ -234,7 +234,7 @@ void Renderer::renderMeshWithMaterial(const Matrix44 model, GFX::Mesh* mesh, SCN
 	shader->setUniform("u_time", t );
 
 	// Render just the verticies as a wireframe
-	if (render_wireframe)
+	if (this->render_wireframe)
 		glPolygonMode( GL_FRONT_AND_BACK, GL_LINE );
 
 	//do the draw call that renders the mesh into the screen
@@ -253,8 +253,8 @@ void Renderer::renderMeshWithMaterial(const Matrix44 model, GFX::Mesh* mesh, SCN
 void Renderer::showUI()
 {
 		
-	ImGui::Checkbox("Wireframe", &render_wireframe);
-	ImGui::Checkbox("Boundaries", &render_boundaries);
+	ImGui::Checkbox("Wireframe", &this->render_wireframe);
+	ImGui::Checkbox("Boundaries", &this->render_boundaries);
 
 	//add here your stuff
 	//...

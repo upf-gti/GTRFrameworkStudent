@@ -15,13 +15,6 @@ namespace GFX {
 
 namespace SCN {
 
-	// Generate the renderer call struct
-	struct sDrawCommand {
-		GFX::Mesh* mesh;
-		SCN::Material* material;
-		Matrix44 model;
-	};
-
 	class Prefab;
 	class Material;
 
