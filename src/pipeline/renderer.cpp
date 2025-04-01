@@ -55,7 +55,7 @@ void Renderer::setupScene()
 		skybox_cubemap = nullptr;
 }
 
-void orderNodes(Camera* cam) {
+void Renderer::orderNodes(Camera* cam) {
 
 	// Separate the nodes into opaque and transparent
 	for (sDrawCommand command : draw_command_list) {
@@ -82,12 +82,26 @@ void orderNodes(Camera* cam) {
 
 }
 
-void parseNodes(SCN::Node* node, Camera* cam) {
-	if (!node) {
+void Renderer::parseNodes(SCN::Node* node, Camera* cam) {
+	if (!node || !node->visible) {
 		return;
 	}
 
 	if (node->mesh) {
+
+		Matrix44 global = node->getGlobalMatrix();
+
+		// Obtener centro y radio del bounding sphere
+		Vector3f center = global * node->mesh->box.center;
+		float radius = node->mesh->radius;
+
+		// Hacemos el test del frustum
+		if (cam->testSphereInFrustum(center, radius) == 0) {
+
+			//std::cout << "Nodo fuera de frustum: " << node->name << std::endl;
+
+			return; // está fuera del frustum, no lo renderizamos
+		}
 
 		sDrawCommand draw_com;
 		draw_com.mesh = node->mesh;
@@ -106,6 +120,9 @@ void Renderer::parseSceneEntities(SCN::Scene* scene, Camera* cam) {
 	// HERE =====================
 	// TODO: GENERATE RENDERABLES
 	// ==========================
+	draw_command_list.clear();
+	opaqueNodes.clear();
+	transparentNodes.clear();
 
 	for (int i = 0; i < scene->entities.size(); i++) {
 		BaseEntity* entity = scene->entities[i];
