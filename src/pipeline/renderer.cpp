@@ -24,6 +24,8 @@ struct sDrawCommand {
 };
 
 std::vector<sDrawCommand> draw_command_list;
+std::vector<sDrawCommand> transparentNodes;
+std::vector<sDrawCommand> opaqueNodes;
 
 using namespace SCN;
 
@@ -51,6 +53,33 @@ void Renderer::setupScene()
 		skybox_cubemap = GFX::Texture::Get(std::string(scene->base_folder + "/" + scene->skybox_filename).c_str());
 	else
 		skybox_cubemap = nullptr;
+}
+
+void orderNodes(Camera* cam) {
+
+	// Separate the nodes into opaque and transparent
+	for (sDrawCommand command : draw_command_list) {
+		if (command.material->alpha_mode == SCN::eAlphaMode::BLEND) {
+			transparentNodes.push_back(command);
+		}
+		else {
+			opaqueNodes.push_back(command);
+		}
+	}
+
+	// Sort the two vectors acording the indications
+	std::sort(transparentNodes.begin(), transparentNodes.end(), [cam](sDrawCommand& n1, sDrawCommand& n2) {
+		float distN1 = (n1.model.getTranslation() - cam->eye).length();
+		float distN2 = (n2.model.getTranslation() - cam->eye).length();
+		return distN1 < distN2;
+		});
+
+	std::sort(opaqueNodes.begin(), opaqueNodes.end(), [cam](sDrawCommand& n1, sDrawCommand& n2) {
+		float distN1 = (n1.model.getTranslation() - cam->eye).length();
+		float distN2 = (n2.model.getTranslation() - cam->eye).length();
+		return distN1 > distN2;
+		});
+
 }
 
 void parseNodes(SCN::Node* node, Camera* cam) {
@@ -96,6 +125,8 @@ void Renderer::parseSceneEntities(SCN::Scene* scene, Camera* cam) {
 		// ...
 	}
 
+	orderNodes(cam);
+
 }
 
 void Renderer::renderScene(SCN::Scene* scene, Camera* camera)
@@ -120,7 +151,11 @@ void Renderer::renderScene(SCN::Scene* scene, Camera* camera)
 	// TODO: RENDER RENDERABLES
 	// ==========================
 
-	for (sDrawCommand command : draw_command_list) {
+	for (sDrawCommand command : opaqueNodes) {
+		Renderer::renderMeshWithMaterial(command.model, command.mesh, command.material);
+	}
+
+	for (sDrawCommand command : transparentNodes) {
 		Renderer::renderMeshWithMaterial(command.model, command.mesh, command.material);
 	}
 }
