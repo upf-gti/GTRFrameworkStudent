@@ -184,33 +184,7 @@ void Renderer::renderSkybox(GFX::Texture* cubemap)
 	m.setTranslation(camera->eye.x, camera->eye.y, camera->eye.z);
 	m.scale(10, 10, 10);
 
-	// Sending the lights
-	int num_lights = min(MAX_NUM_LIGHTS, this->lights_list.size());
-	vec3 light_positions[MAX_NUM_LIGHTS];
-	vec3 light_colors[MAX_NUM_LIGHTS];
-	float light_intensities[MAX_NUM_LIGHTS] = { 0 };
-	int light_types[MAX_NUM_LIGHTS] = { 0 };
-
-	for (int i = 0; i < num_lights; i++) {
-		LightEntity* light = this->lights_list.at(i);
-		light_positions[i] = light->root.getGlobalMatrix().getTranslation();
-		light_intensities[i] = light->intensity;
-		light_types[i] = light->light_type;
-		light_colors[i] = light->color;
-		/*std::cout 
-			<< light_positions[i] << " " 
-			<< light_intensities[i] << " " 
-			<< light_types[i] << " " 
-			<< light_colors[i] << " " 
-			<< std::endl;*/
-	}
-	//exit(0);
-
 	// Upload camera uniforms
-	shader->setUniform1Array("u_light_types", (int*)light_types, num_lights);
-	shader->setUniform1Array("u_light_intensities", (float*)light_intensities, num_lights);
-	shader->setUniform3Array("u_light_positions", (float*)light_positions, num_lights);
-	shader->setUniform3Array("u_light_colors", (float*)light_colors, num_lights);
 	shader->setUniform("u_viewprojection", camera->viewprojection_matrix);
 	shader->setUniform("u_camera_position", camera->eye);
 	shader->setUniform("u_texture", cubemap, 0);
@@ -251,16 +225,39 @@ void Renderer::renderMeshWithMaterial(const Matrix44 model, GFX::Mesh* mesh, SCN
 
 	material->bind(shader);
 
+	// Sending the lights
+	int num_lights = min(MAX_NUM_LIGHTS, this->lights_list.size());
+	vec3 light_ambient = this->scene->ambient_light;
+	vec3 light_positions[MAX_NUM_LIGHTS];
+	vec3 light_colors[MAX_NUM_LIGHTS];
+	float light_intensities[MAX_NUM_LIGHTS] = { 0 };
+	int light_types[MAX_NUM_LIGHTS] = { 0 };
+
+	for (int i = 0; i < num_lights; i++) {
+		LightEntity* light = this->lights_list.at(i);
+		light_positions[i] = light->root.getGlobalMatrix().getTranslation();
+		light_intensities[i] = light->intensity;
+		light_types[i] = light->light_type;
+		light_colors[i] = light->color;
+	}
+
+	shader->setFloat("u_shininess", material->shininess);
+	shader->setUniform3("u_light_ambient", light_ambient);
+	shader->setUniform1Array("u_light_types", (int*)light_types, num_lights);
+	shader->setUniform1Array("u_light_intensities", (float*)light_intensities, num_lights);
+	shader->setUniform3Array("u_light_positions", (float*)light_positions, num_lights);
+	shader->setUniform3Array("u_light_colors", (float*)light_colors, num_lights);
+
 	//upload uniforms
 	shader->setUniform("u_model", model);
-
+	
 	// Upload camera uniforms
 	shader->setUniform("u_viewprojection", camera->viewprojection_matrix);
 	shader->setUniform("u_camera_position", camera->eye);
 
 	// Upload time, for cool shader effects
-	float t = getTime();
-	shader->setUniform("u_time", t );
+	float time = getTime();
+	shader->setUniform("u_time", time);
 
 	// Render just the verticies as a wireframe
 	if (this->render_wireframe)

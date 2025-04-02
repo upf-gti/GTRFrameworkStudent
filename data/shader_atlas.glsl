@@ -86,6 +86,7 @@ void main()
 }
 
 
+// LAB2
 \texture.fs
 
 #version 330 core
@@ -101,12 +102,13 @@ uniform sampler2D u_texture;
 uniform float u_time;
 uniform float u_alpha_cutoff;
 
-// LAB2
+uniform float u_shininess;
+uniform vec3 u_light_ambient;
 uniform int u_light_types[10];
 uniform vec3 u_light_positions[10];
 uniform vec3 u_light_colors[10];
 uniform float u_light_intensities[10];
-// uniform int u_light_count;
+uniform vec3 u_camera_position;
 
 out vec4 FragColor;
 
@@ -116,35 +118,48 @@ void main()
 	vec4 color = u_color;
 	color *= texture( u_texture, v_uv );
 
-	// LAB2
-	vec3 light_component = vec3(0.0);
-	for(int i = 0; i < 4; i++) {
-		vec3 light; 
-		if (u_light_types[i] == 1) {	
-			// POINT
-			light = u_light_positions[i] - v_world_position;
-		} 
-		else if (u_light_types[i] == 2) {	
-			// SPOT: attenuation
-			;
-		}
-		else if (u_light_types[i] == 3 ) {	 
-			// DIRECTIONAL
-			light = u_light_positions[i];
-		}
-		else {
+	vec3 ambient_component = u_light_ambient;
+	vec3 diffuse_component = vec3(0.0);
+	vec3 specular_component = vec3(0.0);
+	for(int i = 0; i < 10; i++) 
+	{
+		if (u_light_types[i] == 0)
+		{
 			// NO LIGHTS
-			;
+			continue;
 		}
-		
-		float l_dot_normalized = clamp(dot(normalize(light), normalize(v_normal)), 0.0, 1.0);
-		light_component += l_dot_normalized * u_light_intensities[i] * u_light_colors[i];
+		vec3 light_position;
+		if (u_light_types[i] == 1) 
+		{	
+			// POINT
+			light_position = u_light_positions[i] - v_world_position;
+		} 
+		else if (u_light_types[i] == 2) 
+		{	
+			// SPOT: attenuation
+		}
+		else if (u_light_types[i] == 3 ) 
+		{	 
+			// DIRECTIONAL
+			light_position = u_light_positions[i];
+		}
+
+		light_position = normalize(light_position);
+		vec3 view_position = normalize(u_camera_position - v_world_position);
+		vec3 normal_direction = normalize(v_normal);
+		vec3 reflection_direction = normalize(reflect(-light_position, normal_direction));
+
+		float L_dot_N = clamp(dot(normal_direction, light_position), 0.0, 1.0);
+		float R_dot_V = clamp(dot(reflection_direction, view_position), 0.0, 1.0);
+
+		diffuse_component +=  u_light_colors[i] * u_light_intensities[i] * L_dot_N;
+		specular_component += u_light_colors[i] * u_light_intensities[i] * pow(R_dot_V, u_shininess);
 	}
- 
+
 	if(color.a < u_alpha_cutoff)
 		discard;
 
-	//color.xyz *= light_component.xyz;
+	color.xyz *= ambient_component + diffuse_component + specular_component * 1,04;
 	FragColor = color;
 }
 
