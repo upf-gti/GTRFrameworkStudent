@@ -101,6 +101,13 @@ uniform sampler2D u_texture;
 uniform float u_time;
 uniform float u_alpha_cutoff;
 
+// LAB2
+uniform int u_light_types[10];
+uniform vec3 u_light_positions[10];
+uniform vec3 u_light_colors[10];
+uniform float u_light_intensities[10];
+// uniform int u_light_count;
+
 out vec4 FragColor;
 
 void main()
@@ -109,9 +116,35 @@ void main()
 	vec4 color = u_color;
 	color *= texture( u_texture, v_uv );
 
+	// LAB2
+	vec3 light_component = vec3(0.0);
+	for(int i = 0; i < 4; i++) {
+		vec3 light; 
+		if (u_light_types[i] == 1) {	
+			// POINT
+			light = u_light_positions[i] - v_world_position;
+		} 
+		else if (u_light_types[i] == 2) {	
+			// SPOT: attenuation
+			;
+		}
+		else if (u_light_types[i] == 3 ) {	 
+			// DIRECTIONAL
+			light = u_light_positions[i];
+		}
+		else {
+			// NO LIGHTS
+			;
+		}
+		
+		float l_dot_normalized = clamp(dot(normalize(light), normalize(v_normal)), 0.0, 1.0);
+		light_component += l_dot_normalized * u_light_intensities[i] * u_light_colors[i];
+	}
+ 
 	if(color.a < u_alpha_cutoff)
 		discard;
 
+	//color.xyz *= light_component.xyz;
 	FragColor = color;
 }
 

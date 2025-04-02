@@ -83,6 +83,7 @@ void Renderer::parseSceneEntities(SCN::Scene* scene, Camera* cam)
 	// ==========================
 	this->draw_command_opaque_list.clear();
 	this->draw_command_transparent_list.clear();
+	this->lights_list.clear();
 
 	for (int i = 0; i < scene->entities.size(); i++) {
 		BaseEntity* entity = scene->entities[i];
@@ -94,9 +95,14 @@ void Renderer::parseSceneEntities(SCN::Scene* scene, Camera* cam)
 		// Store Prefab Entities
 		if (entity->getType() == eEntityType::PREFAB) {
 			this->parseNode(&((PrefabEntity*)entity)->root, cam);
+			continue;
 		}
 
 		// Store Lights
+		if (entity->getType() == eEntityType::LIGHT) {
+			this->lights_list.push_back((LightEntity*)entity);
+		}
+
 		// ...
 	}
 }
@@ -139,7 +145,6 @@ void Renderer::renderScene(SCN::Scene* scene, Camera* camera)
 			return distA > distB; // Farthest first
 		});
 
-
 	for (sDrawCommand draw_command : this->draw_command_opaque_list) {
 		renderMeshWithMaterial(draw_command.model, draw_command.mesh, draw_command.material);
 	}
@@ -152,7 +157,6 @@ void Renderer::renderScene(SCN::Scene* scene, Camera* camera)
 	}
 
 	glDisable(GL_BLEND);
-		
 }
 
 
@@ -174,18 +178,43 @@ void Renderer::renderSkybox(GFX::Texture* cubemap)
 	if (!shader)
 		return;
 	shader->enable();
-
+	
 	// Center the skybox at the camera, with a big sphere
 	Matrix44 m;
 	m.setTranslation(camera->eye.x, camera->eye.y, camera->eye.z);
 	m.scale(10, 10, 10);
-	shader->setUniform("u_model", m);
+
+	// Sending the lights
+	int num_lights = min(MAX_NUM_LIGHTS, this->lights_list.size());
+	vec3 light_positions[MAX_NUM_LIGHTS];
+	vec3 light_colors[MAX_NUM_LIGHTS];
+	float light_intensities[MAX_NUM_LIGHTS] = { 0 };
+	int light_types[MAX_NUM_LIGHTS] = { 0 };
+
+	for (int i = 0; i < num_lights; i++) {
+		LightEntity* light = this->lights_list.at(i);
+		light_positions[i] = light->root.getGlobalMatrix().getTranslation();
+		light_intensities[i] = light->intensity;
+		light_types[i] = light->light_type;
+		light_colors[i] = light->color;
+		/*std::cout 
+			<< light_positions[i] << " " 
+			<< light_intensities[i] << " " 
+			<< light_types[i] << " " 
+			<< light_colors[i] << " " 
+			<< std::endl;*/
+	}
+	//exit(0);
 
 	// Upload camera uniforms
+	shader->setUniform1Array("u_light_types", (int*)light_types, num_lights);
+	shader->setUniform1Array("u_light_intensities", (float*)light_intensities, num_lights);
+	shader->setUniform3Array("u_light_positions", (float*)light_positions, num_lights);
+	shader->setUniform3Array("u_light_colors", (float*)light_colors, num_lights);
 	shader->setUniform("u_viewprojection", camera->viewprojection_matrix);
 	shader->setUniform("u_camera_position", camera->eye);
-
 	shader->setUniform("u_texture", cubemap, 0);
+	shader->setUniform("u_model", m);
 
 	sphere.render(GL_TRIANGLES);
 

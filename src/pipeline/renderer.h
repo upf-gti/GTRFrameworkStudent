@@ -1,8 +1,9 @@
 #pragma once
 #include "scene.h"
 #include "prefab.h"
-
 #include "light.h"
+
+#define MAX_NUM_LIGHTS 10
 
 //forward declarations
 class Camera;
@@ -14,7 +15,7 @@ namespace GFX {
 }
 
 namespace SCN {
-
+	
 	class Prefab;
 	class Material;
 
@@ -33,13 +34,12 @@ namespace SCN {
 	public:
 		bool render_wireframe;
 		bool render_boundaries;
-
-		std::vector<sDrawCommand> draw_command_opaque_list;
-		std::vector<sDrawCommand> draw_command_transparent_list;
-
 		GFX::Texture* skybox_cubemap;
 		SCN::Scene* scene;
-
+		std::vector<sDrawCommand> draw_command_opaque_list;
+		std::vector<sDrawCommand> draw_command_transparent_list;
+		std::vector<LightEntity*> lights_list;
+		
 		//updated every frame
 		Renderer(const char* shaders_atlas_filename );
 
@@ -63,5 +63,4 @@ namespace SCN {
 
 		void showUI();
 	};
-
 };
