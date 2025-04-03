@@ -88,6 +88,8 @@ void Renderer::parseSceneEntities(SCN::Scene* scene, Camera* cam) {
 	// important to clear the list in each pass
 	draw_commands_opaque.clear();
 	draw_commands_transp.clear();
+	
+	light_info.count = 0;
 
 	for (int i = 0; i < scene->entities.size(); i++) {
 		BaseEntity* entity = scene->entities[i];
@@ -110,8 +112,13 @@ void Renderer::parseSceneEntities(SCN::Scene* scene, Camera* cam) {
 		case eEntityType::LIGHT:
 		{
 			// Store Lights
-			// ...
-			//LightEntity* light = static_cast<LightEntity*>(entity);
+			LightEntity* light = static_cast<LightEntity*>(entity);
+
+			light_info.intensities[light_info.count] = light->intensity;
+			light_info.types[light_info.count] = light->light_type;
+			light_info.colors[light_info.count] = light->color;
+			light_info.positions[light_info.count] = light->root.getGlobalMatrix().getTranslation();
+			light_info.count++;
 			break;
 		}
 		default:
@@ -222,7 +229,7 @@ void Renderer::renderMeshWithMaterial(const Matrix44 model, GFX::Mesh* mesh, SCN
 	glEnable(GL_DEPTH_TEST);
 
 	//chose a shader
-	shader = GFX::Shader::Get("texture");
+	shader = GFX::Shader::Get("singlepass");
 
 	assert(glGetError() == GL_NO_ERROR);
 
@@ -243,6 +250,16 @@ void Renderer::renderMeshWithMaterial(const Matrix44 model, GFX::Mesh* mesh, SCN
 	// Upload time, for cool shader effects
 	float t = getTime();
 	shader->setUniform("u_time", t );
+
+	// upload light-related uniforms
+	// setUniform3Array for SINGLEPASS and then iterate over all of them (fixed count on for loop, if inside with another uniform for counting)
+	shader->setUniform("u_ambient_light", ambient_light);
+	shader->setUniform("u_light_count", light_info.count);
+
+	shader->setUniform1Array("u_light_intensity", light_info.intensities, MAX_LIGHTS);
+	shader->setUniform1Array("u_light_type", light_info.types, MAX_LIGHTS);
+	shader->setUniform3Array("u_light_vector", (float*)light_info.positions, MAX_LIGHTS); // position
+	shader->setUniform3Array("u_light_color", (float*)light_info.colors, MAX_LIGHTS);
 
 	// Render just the verticies as a wireframe
 	if (render_wireframe)
