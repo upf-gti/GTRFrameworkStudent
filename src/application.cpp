@@ -160,12 +160,10 @@ void Application::onKeyUp(SDL_KeyboardEvent event)
 
 void Application::onGamepadButtonDown(SDL_JoyButtonEvent event)
 {
-
 }
 
 void Application::onGamepadButtonUp(SDL_JoyButtonEvent event)
 {
-
 }
 
 void Application::onMouseButtonDown( SDL_MouseButtonEvent event )

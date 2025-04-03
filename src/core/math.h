@@ -276,7 +276,7 @@ class Matrix44
 		void setRotation( float angle_in_rad, const Vector3f& axis );
 		void setScale(float x, float y, float z);
 
-		Vector3f getTranslation();
+		Vector3f getTranslation() const;
 		Vector3f getScale();
 
 		bool getXYZ(float* euler) const; //not sure which axis...

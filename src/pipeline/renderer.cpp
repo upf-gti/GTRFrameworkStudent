@@ -17,18 +17,18 @@
 
 #include "scene.h"
 
-
 using namespace SCN;
 
 //some globals
 GFX::Mesh sphere;
 
+
 Renderer::Renderer(const char* shader_atlas_filename)
 {
-	render_wireframe = false;
-	render_boundaries = false;
-	scene = nullptr;
-	skybox_cubemap = nullptr;
+	this->render_wireframe = false;
+	this->render_boundaries = false;
+	this->scene = nullptr;
+	this->skybox_cubemap = nullptr;
 
 	if (!GFX::Shader::LoadAtlas(shader_atlas_filename))
 		exit(1);
@@ -40,16 +40,49 @@ Renderer::Renderer(const char* shader_atlas_filename)
 
 void Renderer::setupScene()
 {
-	if (scene->skybox_filename.size())
-		skybox_cubemap = GFX::Texture::Get(std::string(scene->base_folder + "/" + scene->skybox_filename).c_str());
-	else
-		skybox_cubemap = nullptr;
+	if (this->scene->skybox_filename.size()) {
+		std::string filename = this->scene->base_folder + "/" + this->scene->skybox_filename;
+		this->skybox_cubemap = GFX::Texture::Get(filename.c_str());
+	}
+	else {
+		this->skybox_cubemap = nullptr;
+	}
 }
 
-void Renderer::parseSceneEntities(SCN::Scene* scene, Camera* cam) {
+void Renderer::parseNode(SCN::Node* node, Camera* cam)
+{
+	if (!node) {
+		return;
+	}
+	
+	if (node->mesh) {
+		sDrawCommand draw_command;
+		draw_command.mesh = node->mesh;
+		draw_command.material = node->material;
+		draw_command.model = node->getGlobalMatrix();
+
+		if (node->material->alpha_mode == NO_ALPHA) {
+			this->draw_command_opaque_list.push_back(draw_command);
+		}
+		else {
+			this->draw_command_transparent_list.push_back(draw_command);
+		}
+		
+	}
+
+	// Store Children Prefab Entities
+	for (SCN::Node* child : node->children) {
+		this->parseNode(child, cam);
+	}
+}
+
+void Renderer::parseSceneEntities(SCN::Scene* scene, Camera* cam) 
+{
 	// HERE =====================
 	// TODO: GENERATE RENDERABLES
 	// ==========================
+	this->draw_command_opaque_list.clear();
+	this->draw_command_transparent_list.clear();
 
 	for (int i = 0; i < scene->entities.size(); i++) {
 		BaseEntity* entity = scene->entities[i];
@@ -57,23 +90,22 @@ void Renderer::parseSceneEntities(SCN::Scene* scene, Camera* cam) {
 		if (!entity->visible) {
 			continue;
 		}
-
-		// Store Prefab Entitys
-		// ...
-		//		Store Children Prefab Entities
+	
+		// Store Prefab Entities
+		if (entity->getType() == eEntityType::PREFAB) {
+			this->parseNode(&((PrefabEntity*)entity)->root, cam);
+		}
 
 		// Store Lights
 		// ...
 	}
-	
 }
 
 void Renderer::renderScene(SCN::Scene* scene, Camera* camera)
 {
 	this->scene = scene;
-	setupScene();
-
-	parseSceneEntities(scene, camera);
+	this->setupScene();
+	this->parseSceneEntities(scene, camera);
 
 	//set the clear color (the background color)
 	glClearColor(scene->background_color.x, scene->background_color.y, scene->background_color.z, 1.0);
@@ -83,12 +115,44 @@ void Renderer::renderScene(SCN::Scene* scene, Camera* camera)
 	GFX::checkGLErrors();
 
 	//render skybox
-	if(skybox_cubemap)
-		renderSkybox(skybox_cubemap);
+	if (this->skybox_cubemap) {
+		this->renderSkybox(this->skybox_cubemap);
+	}
 
 	// HERE =====================
 	// TODO: RENDER RENDERABLES
 	// ==========================
+	
+	// Sort opaque objects from nearest to farthest
+	std::sort(this->draw_command_opaque_list.begin(), this->draw_command_opaque_list.end(),
+		[&](const sDrawCommand& a, const sDrawCommand& b) {
+			float distA = (camera->eye - a.model.getTranslation()).length();
+			float distB = (camera->eye - b.model.getTranslation()).length();
+			return distA < distB; // Closest first
+		});
+
+	// Sort transparent objects from farthest to nearest
+	std::sort(this->draw_command_transparent_list.begin(), this->draw_command_transparent_list.end(),
+		[&](const sDrawCommand& a, const sDrawCommand& b) {
+			float distA = (camera->eye - a.model.getTranslation()).length();
+			float distB = (camera->eye - b.model.getTranslation()).length();
+			return distA > distB; // Farthest first
+		});
+
+
+	for (sDrawCommand draw_command : this->draw_command_opaque_list) {
+		renderMeshWithMaterial(draw_command.model, draw_command.mesh, draw_command.material);
+	}
+
+	glEnable(GL_BLEND);
+	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+	for (sDrawCommand draw_command : this->draw_command_transparent_list) {
+		this->renderMeshWithMaterial(draw_command.model, draw_command.mesh, draw_command.material);
+	}
+
+	glDisable(GL_BLEND);
+		
 }
 
 
@@ -103,7 +167,7 @@ void Renderer::renderSkybox(GFX::Texture* cubemap)
 	glDisable(GL_DEPTH_TEST);
 	glDisable(GL_CULL_FACE);
 
-	if (render_wireframe)
+	if (this->render_wireframe)
 		glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
 
 	GFX::Shader* shader = GFX::Shader::Get("skybox");
@@ -170,7 +234,7 @@ void Renderer::renderMeshWithMaterial(const Matrix44 model, GFX::Mesh* mesh, SCN
 	shader->setUniform("u_time", t );
 
 	// Render just the verticies as a wireframe
-	if (render_wireframe)
+	if (this->render_wireframe)
 		glPolygonMode( GL_FRONT_AND_BACK, GL_LINE );
 
 	//do the draw call that renders the mesh into the screen
@@ -189,8 +253,8 @@ void Renderer::renderMeshWithMaterial(const Matrix44 model, GFX::Mesh* mesh, SCN
 void Renderer::showUI()
 {
 		
-	ImGui::Checkbox("Wireframe", &render_wireframe);
-	ImGui::Checkbox("Boundaries", &render_boundaries);
+	ImGui::Checkbox("Wireframe", &this->render_wireframe);
+	ImGui::Checkbox("Boundaries", &this->render_boundaries);
 
 	//add here your stuff
 	//...

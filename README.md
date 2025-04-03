@@ -2,6 +2,7 @@
 OpenGL C++ Framework used for teach the Real-time Grapchics course at Universitat Pompeu Fabra.
 
 Framework by Javier Agenjo.
+Group: Marc Bosch Manzano & Dídac Hierro Sotero.
 
 ## Building
 
