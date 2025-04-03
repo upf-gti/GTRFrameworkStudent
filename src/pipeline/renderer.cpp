@@ -232,6 +232,9 @@ void Renderer::renderMeshWithMaterial(const Matrix44 model, GFX::Mesh* mesh, SCN
 	vec3 light_colors[MAX_NUM_LIGHTS];
 	float light_intensities[MAX_NUM_LIGHTS] = { 0 };
 	int light_types[MAX_NUM_LIGHTS] = { 0 };
+	vec3 light_directions[MAX_NUM_LIGHTS];
+	float light_cos_angle_max[MAX_NUM_LIGHTS];
+	float light_cos_angle_min[MAX_NUM_LIGHTS];
 
 	for (int i = 0; i < num_lights; i++) {
 		LightEntity* light = this->lights_list.at(i);
@@ -239,6 +242,16 @@ void Renderer::renderMeshWithMaterial(const Matrix44 model, GFX::Mesh* mesh, SCN
 		light_intensities[i] = light->intensity;
 		light_types[i] = light->light_type;
 		light_colors[i] = light->color;
+		if (light->light_type == 2) {  //Spotlight specific
+			light_directions[i] = light->root.getGlobalMatrix().rotateVector(light->direction); //Transform direction to world space
+			light_cos_angle_min[i] = light->getCosAngleMin(); //Precomputed cosine (cone_info.x)
+			light_cos_angle_max[i] = light->getCosAngleMax(); //Precomputed cosine (cone_info.y)
+		}
+		else {
+			light_directions[i] = vec3(0.0f); //Unused for non-spotlights
+			light_cos_angle_min[i] = 0.0f;
+			light_cos_angle_max[i] = 0.0f;
+		}
 	}
 
 	shader->setUniform("u_num_lights", num_lights);
@@ -248,6 +261,9 @@ void Renderer::renderMeshWithMaterial(const Matrix44 model, GFX::Mesh* mesh, SCN
 	shader->setUniform1Array("u_light_intensities", (float*)light_intensities, num_lights);
 	shader->setUniform3Array("u_light_positions", (float*)light_positions, num_lights);
 	shader->setUniform3Array("u_light_colors", (float*)light_colors, num_lights);
+	shader->setUniform3Array("u_light_directions", (float*)light_directions, num_lights);
+	shader->setUniform1Array("u_light_cos_angle_min", (float*)light_cos_angle_min, num_lights);
+	shader->setUniform1Array("u_light_cos_angle_max", (float*)light_cos_angle_max, num_lights);
 
 	//upload uniforms
 	shader->setUniform("u_model", model);

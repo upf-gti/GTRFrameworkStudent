@@ -102,14 +102,17 @@ uniform sampler2D u_texture;
 uniform float u_time;
 uniform float u_alpha_cutoff;
 
-uniform int u_num_lights;
-uniform float u_shininess;
-uniform vec3 u_light_ambient;
-uniform int u_light_types[10];
-uniform vec3 u_light_positions[10];
-uniform vec3 u_light_colors[10];
-uniform float u_light_intensities[10];
-uniform vec3 u_camera_position;
+uniform int u_num_lights; //Number of lights
+uniform float u_shininess; //Coefficient of shininess
+uniform vec3 u_light_ambient; //Ambient light (constant)
+uniform int u_light_types[10]; //Light type
+uniform vec3 u_light_positions[10]; //Light position
+uniform vec3 u_light_colors[10]; //Light color
+uniform float u_light_intensities[10]; //Light intensity
+uniform vec3 u_camera_position; //Camera position
+uniform vec3 u_light_directions[10];  //Spotlight direction (D)
+uniform float u_light_cos_angle_max[10]; //cos(alpha_max)
+uniform float u_light_cos_angle_min[10]; //cos(alpha_min)
 
 out vec4 FragColor;
 
@@ -132,19 +135,33 @@ void main()
 		vec3 light_position;
 		float attenuation = 1.0; //Default for directional lights
 
-		if (u_light_types[i] == 1) 
-		{	
+		if (u_light_types[i] == 1){	
 		//POINT
 			light_position = u_light_positions[i] - v_world_position;
 			float distance = length(light_position);
 			attenuation = 1.0 / max(distance*distance, 0.00001); //quadratic attenuation (max function to avoid 0 determinant)
 		} 
-		else if (u_light_types[i] == 2) 
-		{	
-		//SPOT: attenuation
+		else if (u_light_types[i] == 2){  
+		//SPOTLIGHT
+			light_position = u_light_positions[i] - v_world_position;
+			float distance = length(light_position);
+			attenuation = 1.0 / max(distance * distance, 0.00001);
+
+			//Angular attenuation (spotlight cone)
+			vec3 L = normalize(light_position);
+			vec3 D = normalize(u_light_directions[i]); 
+			float cos_theta = dot(L, D);
+			float cos_outer = u_light_cos_angle_max[i]; //cos(alpha_max)
+			float cos_inner = u_light_cos_angle_min[i]; //cos(alpha_min)
+
+			if (cos_theta >= cos_outer){
+				float angular_attenuation = clamp((cos_theta - cos_outer) / (cos_inner - cos_outer), 0.0, 1.0);
+				attenuation *= angular_attenuation;
+			} else{
+				attenuation = 0.0;  //Outside the spotlight cone
+			}
 		}
-		else if (u_light_types[i] == 3 ) 
-		{	 
+		else if (u_light_types[i] == 3 ){	 
 		//DIRECTIONAL
 			light_position = u_light_positions[i];
 			attenuation = 1.0; //No attenuation
