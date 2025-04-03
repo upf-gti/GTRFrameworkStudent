@@ -241,6 +241,7 @@ void Renderer::renderMeshWithMaterial(const Matrix44 model, GFX::Mesh* mesh, SCN
 		light_colors[i] = light->color;
 	}
 
+	shader->setUniform("u_num_lights", num_lights);
 	shader->setFloat("u_shininess", material->shininess);
 	shader->setUniform3("u_light_ambient", light_ambient);
 	shader->setUniform1Array("u_light_types", (int*)light_types, num_lights);

@@ -102,6 +102,7 @@ uniform sampler2D u_texture;
 uniform float u_time;
 uniform float u_alpha_cutoff;
 
+uniform int u_num_lights;
 uniform float u_shininess;
 uniform vec3 u_light_ambient;
 uniform int u_light_types[10];
@@ -121,27 +122,32 @@ void main()
 	vec3 ambient_component = u_light_ambient;
 	vec3 diffuse_component = vec3(0.0);
 	vec3 specular_component = vec3(0.0);
-	for(int i = 0; i < 10; i++) 
+
+	for(int i = 0; i < u_num_lights; i++) 
 	{
-		if (u_light_types[i] == 0)
-		{
-			// NO LIGHTS
+		if (u_light_types[i] == 0){
+		//NO LIGHT
 			continue;
 		}
 		vec3 light_position;
+		float attenuation = 1.0; //Default for directional lights
+
 		if (u_light_types[i] == 1) 
 		{	
-			// POINT
+		//POINT
 			light_position = u_light_positions[i] - v_world_position;
+			float distance = length(light_position);
+			attenuation = 1.0 / max(distance*distance, 0.00001); //quadratic attenuation (max function to avoid 0 determinant)
 		} 
 		else if (u_light_types[i] == 2) 
 		{	
-			// SPOT: attenuation
+		//SPOT: attenuation
 		}
 		else if (u_light_types[i] == 3 ) 
 		{	 
-			// DIRECTIONAL
+		//DIRECTIONAL
 			light_position = u_light_positions[i];
+			attenuation = 1.0; //No attenuation
 		}
 
 		light_position = normalize(light_position);
@@ -152,14 +158,14 @@ void main()
 		float L_dot_N = clamp(dot(normal_direction, light_position), 0.0, 1.0);
 		float R_dot_V = clamp(dot(reflection_direction, view_position), 0.0, 1.0);
 
-		diffuse_component +=  u_light_colors[i] * u_light_intensities[i] * L_dot_N;
-		specular_component += u_light_colors[i] * u_light_intensities[i] * pow(R_dot_V, u_shininess);
+		diffuse_component +=  attenuation * u_light_colors[i] * u_light_intensities[i] * L_dot_N;
+		specular_component += attenuation * u_light_colors[i] * u_light_intensities[i] * pow(R_dot_V, u_shininess);
 	}
 
 	if(color.a < u_alpha_cutoff)
 		discard;
 
-	color.xyz *= ambient_component + diffuse_component + specular_component * 1,04;
+	color.xyz *= ambient_component + diffuse_component + specular_component * 1.04;
 	FragColor = color;
 }
 
