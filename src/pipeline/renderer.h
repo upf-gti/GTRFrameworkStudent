@@ -4,7 +4,7 @@
 
 #include "light.h"
 
-#define MAX_LIGHTS 10
+constexpr auto MAX_LIGHTS = 10;
 
 //forward declarations
 class Camera;
@@ -38,7 +38,7 @@ namespace SCN {
 		GFX::Texture* skybox_cubemap;
 
 		SCN::Scene* scene;
-		Vector3f ambient_light;
+		Vector3f ambient_light = { 1.f };
 
 		// setup opaque and transparent renderables
 		std::vector<SCN::s_DrawCommand> draw_commands_opaque;

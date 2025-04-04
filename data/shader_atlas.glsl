@@ -275,16 +275,24 @@ uniform sampler2D u_texture;
 uniform float u_time;
 uniform float u_alpha_cutoff;
 
+uniform vec3 u_ambient_light;
+uniform vec3 u_light_position[10];	//camera eye
+
 out vec4 FragColor;
 
 void main()
 {
 	vec2 uv = v_uv;
 	vec4 color = u_color;
-	color *= texture( u_texture, v_uv );
+	color *= texture( u_texture, v_uv );	// Initial color of the surface of the object
 
 	if(color.a < u_alpha_cutoff)
 		discard;
 
-	FragColor = color;
+	vec3 light = u_ambient_light;			// Amount of light that we have at the beginning When rendering the image
+	vec4 final_color;
+	final_color.xyz = color.xyz * light;	// We perform this because we are multiplting a vector4 with a vector3
+	final_color.a = color.a;				// We just pass the remaining dimension to the final_color
+
+	FragColor = final_color;
 }

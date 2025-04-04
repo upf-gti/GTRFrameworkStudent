@@ -258,7 +258,7 @@ void Renderer::renderMeshWithMaterial(const Matrix44 model, GFX::Mesh* mesh, SCN
 
 	shader->setUniform1Array("u_light_intensity", light_info.intensities, MAX_LIGHTS);
 	shader->setUniform1Array("u_light_type", light_info.types, MAX_LIGHTS);
-	shader->setUniform3Array("u_light_vector", (float*)light_info.positions, MAX_LIGHTS); // position
+	shader->setUniform3Array("u_light_position", (float*)light_info.positions, MAX_LIGHTS); // position
 	shader->setUniform3Array("u_light_color", (float*)light_info.colors, MAX_LIGHTS);
 
 	// Render just the verticies as a wireframe
