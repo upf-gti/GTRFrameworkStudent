@@ -264,6 +264,13 @@ vec3 perturbNormal(vec3 N, vec3 WP, vec2 uv, vec3 normal_pixel)
 
 #include utils
 
+const int MAX_LIGHTS = 10;
+
+const int NO_LIGHT = 		0;
+const int LT_POINT = 		1;
+const int LT_SPOT =			2;
+const int LT_DIRECTIONAL = 	3;
+
 in vec3 v_position;
 in vec3 v_world_position;
 in vec3 v_normal;
@@ -275,24 +282,61 @@ uniform sampler2D u_texture;
 uniform float u_time;
 uniform float u_alpha_cutoff;
 
+uniform vec3 u_camera_position;
+
+// start phong inputs
 uniform vec3 u_ambient_light;
-uniform vec3 u_light_position[10];	//camera eye
+uniform int u_light_count;
+
+uniform float u_light_intensity[MAX_LIGHTS];
+uniform float u_light_type[MAX_LIGHTS];
+uniform vec3 u_light_position[MAX_LIGHTS];
+uniform vec3 u_light_color[MAX_LIGHTS];
+// end phong inputs
 
 out vec4 FragColor;
 
 void main()
 {
 	vec2 uv = v_uv;
-	vec4 color = u_color;
-	color *= texture( u_texture, v_uv );	// Initial color of the surface of the object
+	vec4 color = u_color; // should always be 1 if not changed somehow
+
+	color *= texture( u_texture, v_uv ); // ka = kd = ks = color (in our implementation)
 
 	if(color.a < u_alpha_cutoff)
 		discard;
 
-	vec3 light = u_ambient_light;			// Amount of light that we have at the beginning When rendering the image
-	vec4 final_color;
-	final_color.xyz = color.xyz * light;	// We perform this because we are multiplting a vector4 with a vector3
-	final_color.a = color.a;				// We just pass the remaining dimension to the final_color
+	// add ambient term
+	vec3 final_light = u_ambient_light;
 
-	FragColor = final_color;
+	vec3 diffuse_term, specular_term, light_intensity, L, R;
+	float N_dot_L, R_dot_V, dist;
+	
+	vec3 N = normalize(v_normal);
+	vec3 V = normalize(u_camera_position - v_world_position);
+
+	for (int i=0; i<u_light_count; i++)
+	{
+		// diffuse
+		L = u_light_position[i] - v_world_position;
+		dist = length(L); // used in light intensity
+		L = normalize(L);
+		N_dot_L = clamp(dot(N, L), 0.0, 1.0);
+
+		light_intensity = u_light_color[i] * u_light_intensity[i] / pow(dist, 2); // light intensity reduced by distance
+
+		diffuse_term = N_dot_L * light_intensity;
+
+		// specular
+		R = reflect(-L, N);
+		R_dot_V = clamp(dot(R, V), 0.0, 1.0);
+
+		specular_term = pow(R_dot_V, 10.0) * light_intensity;
+
+		// add diffuse and specular terms
+		final_light += diffuse_term;
+		final_light += specular_term;
+	}
+
+	FragColor = vec4(final_light * color.xyz, color.a);
 }
