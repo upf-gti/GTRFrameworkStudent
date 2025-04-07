@@ -38,7 +38,7 @@ namespace SCN {
 		GFX::Texture* skybox_cubemap;
 
 		SCN::Scene* scene;
-		Vector3f ambient_light = { 1.f };
+		Vector3f ambient_light = { 0.2f };
 
 		// setup opaque and transparent renderables
 		std::vector<SCN::s_DrawCommand> draw_commands_opaque;
