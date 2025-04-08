@@ -252,7 +252,8 @@ void Renderer::renderMeshWithMaterial(const Matrix44 model, GFX::Mesh* mesh, SCN
 	shader->setUniform("u_time", t );
 
 	// Upload some material properties
-	//shader->setUniform("u_mat_roughness", material->roughness_factor);
+	shader->setUniform("u_roughness", material->roughness_factor);
+	//shader->setUniform("u_metallic", material->metallic_factor);
 
 	// upload light-related uniforms
 	// setUniform3Array for SINGLEPASS and then iterate over all of them (fixed count on for loop, if inside with another uniform for counting)

@@ -67,9 +67,16 @@ namespace SCN {
 		//textures
 		Sampler textures[eTextureChannel::ALL];
 
+		//texture handlers
+		GFX::Texture* color_texture = textures[eTextureChannel::ALBEDO].texture;
+		GFX::Texture* emissive_texture = textures[eTextureChannel::EMISSIVE].texture;
+		GFX::Texture* metallic_roughness_texture = textures[eTextureChannel::METALLIC_ROUGHNESS].texture;
+		GFX::Texture* occlusion_texture = textures[eTextureChannel::OCCLUSION].texture;
+		GFX::Texture* normal_texture = textures[eTextureChannel::NORMALMAP].texture;
+
 		//ctors
 		Material() : alpha_mode(NO_ALPHA), alpha_cutoff(0.5), color(1, 1, 1, 1), two_sided(false), roughness_factor(1), metallic_factor(0) {
-			//color_texture = emissive_texture = metallic_roughness_texture = occlusion_texture = normal_texture = NULL;
+			color_texture = emissive_texture = metallic_roughness_texture = occlusion_texture = normal_texture = NULL;
 			index = s_last_index++;
 		}
 		virtual ~Material();

@@ -99,6 +99,13 @@ void Material::bind(GFX::Shader* shader) {
 		if (texture)
 			shader->setUniform("u_texture", texture, 0);
 
+		// start metallic-roughness texture
+		texture = textures[SCN::eTextureChannel::METALLIC_ROUGHNESS].texture;
+
+		if (texture)
+			shader->setUniform("u_texture_metallic_roughness", texture, 1);
+		// end metallic-roughness texture
+
 		// This is used to say which is the alpha threshold to what we should not paint a pixel on the screen (to cut polygons according to texture alpha)
 		shader->setUniform("u_alpha_cutoff", alpha_mode == SCN::eAlphaMode::MASK ? alpha_cutoff : 0.001f);
 	}

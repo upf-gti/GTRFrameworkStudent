@@ -292,6 +292,10 @@ uniform float u_light_intensity[MAX_LIGHTS];
 uniform float u_light_type[MAX_LIGHTS];
 uniform vec3 u_light_position[MAX_LIGHTS];
 uniform vec3 u_light_color[MAX_LIGHTS];
+
+uniform sampler2D u_texture_metallic_roughness;
+uniform float u_roughness;
+// uniform float u_metallic;
 // end phong inputs
 
 out vec4 FragColor;
@@ -302,6 +306,12 @@ void main()
 	vec4 color = u_color; // should always be 1 if not changed somehow
 
 	color *= texture( u_texture, v_uv ); // ka = kd = ks = color (in our implementation)
+	
+	vec4 metallic_roughness = texture( u_texture_metallic_roughness, v_uv );
+	// float metallic = u_metallic * metallic_roughness.x; // red is metallic
+	float roughness = u_roughness * metallic_roughness.y; // green is roughness
+
+	float shininess = 255.0 - roughness;
 
 	if(color.a < u_alpha_cutoff)
 		discard;
@@ -328,10 +338,10 @@ void main()
 		diffuse_term = N_dot_L * light_intensity;
 
 		// specular
-		R = reflect(-L, N);
+		R = reflect(-L, N); // minus because of reflect function first argument is incident
 		R_dot_V = clamp(dot(R, V), 0.0, 1.0);
 
-		specular_term = pow(R_dot_V, 10.0) * light_intensity;
+		specular_term = pow(R_dot_V, shininess) * light_intensity;
 
 		// add diffuse and specular terms
 		final_light += diffuse_term;
