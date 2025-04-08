@@ -17,7 +17,7 @@ Building requirements are
 
 Once you have all required open a Windows Terminal, go to the project folder and do this steps:
 ```console
-cd CGFrameworkStudent
+cd GTRFrameworkStudent
 mkdir build
 cd build
 cmake ..
