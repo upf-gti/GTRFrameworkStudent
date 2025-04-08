@@ -86,7 +86,7 @@ void main()
 }
 
 
-// LAB2
+// LAB 2
 \texture.fs
 
 #version 330 core
@@ -102,17 +102,17 @@ uniform sampler2D u_texture;
 uniform float u_time;
 uniform float u_alpha_cutoff;
 
-uniform int u_num_lights; //Number of lights
-uniform float u_shininess; //Coefficient of shininess
-uniform vec3 u_light_ambient; //Ambient light (constant)
-uniform int u_light_types[10]; //Light type
-uniform vec3 u_light_positions[10]; //Light position
-uniform vec3 u_light_colors[10]; //Light color
-uniform float u_light_intensities[10]; //Light intensity
-uniform vec3 u_camera_position; //Camera position
-uniform vec3 u_light_directions[10];  //Spotlight direction (D)
-uniform float u_light_cos_angle_max[10]; //cos(alpha_max)
-uniform float u_light_cos_angle_min[10]; //cos(alpha_min)
+uniform int u_num_lights;					// Number of lights
+uniform float u_shininess;					// Coefficient of shininess
+uniform vec3 u_light_ambient;				// Ambient light (constant)
+uniform int u_light_types[10];				// Light type
+uniform vec3 u_light_positions[10];			// Light position
+uniform vec3 u_light_colors[10];			// Light color
+uniform float u_light_intensities[10];		// Light intensity
+uniform vec3 u_camera_position;				// Camera position
+uniform vec3 u_light_directions[10];		// Spotlight direction (D)
+uniform float u_light_cos_angle_max[10];	// cos(alpha_max)
+uniform float u_light_cos_angle_min[10];	// cos(alpha_min)
 
 out vec4 FragColor;
 
@@ -128,61 +128,67 @@ void main()
 
 	for(int i = 0; i < u_num_lights; i++) 
 	{
-		if (u_light_types[i] == 0){
-		//NO LIGHT
+		if (u_light_types[i] == 0)
+		{
+			//NO LIGHT
 			continue;
 		}
+		
 		vec3 light_position;
-		float attenuation = 1.0; //Default for directional lights
+		float attenuation;
 
-		if (u_light_types[i] == 1){	
-		//POINT
+		if (u_light_types[i] == 1)
+		{	
+			//POINT
 			light_position = u_light_positions[i] - v_world_position;
 			float distance = length(light_position);
-			attenuation = 1.0 / max(distance*distance, 0.00001); //quadratic attenuation (max function to avoid 0 determinant)
+			attenuation = 1.0 / max(pow(distance, 2), 0.00001);
 		} 
-		else if (u_light_types[i] == 2){  
-		//SPOTLIGHT
+		else if (u_light_types[i] == 2)
+		{  
+			//SPOTLIGHT
 			light_position = u_light_positions[i] - v_world_position;
 			float distance = length(light_position);
-			attenuation = 1.0 / max(distance * distance, 0.00001);
+			attenuation = 1.0 / max(pow(distance, 2), 0.00001);
 
 			//Angular attenuation (spotlight cone)
 			vec3 L = normalize(light_position);
 			vec3 D = normalize(u_light_directions[i]); 
-			float cos_theta = dot(L, D);
-			float cos_outer = u_light_cos_angle_max[i]; //cos(alpha_max)
-			float cos_inner = u_light_cos_angle_min[i]; //cos(alpha_min)
 
-			if (cos_theta >= cos_outer){
-				float angular_attenuation = clamp((cos_theta - cos_outer) / (cos_inner - cos_outer), 0.0, 1.0);
-				attenuation *= angular_attenuation;
-			} else{
-				attenuation = 0.0;  //Outside the spotlight cone
-			}
+			float cos_max = u_light_cos_angle_max[i];
+			float cos_min = u_light_cos_angle_min[i];
+			
+			float angular_attenuation = 0.0;
+			if (dot(L, D) >= cos_max)
+			{
+				angular_attenuation = 1 - clamp((dot(L, D) - cos_min) / min(cos_max - cos_min, -0.00001), 0.0, 1.0);
+			} 
+			attenuation *= angular_attenuation;
 		}
-		else if (u_light_types[i] == 3 ){	 
-		//DIRECTIONAL
+		else if (u_light_types[i] == 3 )
+		{	 
+			//DIRECTIONAL
 			light_position = u_light_positions[i];
-			attenuation = 1.0; //No attenuation
+			attenuation = 1.0;
 		}
 
 		light_position = normalize(light_position);
 		vec3 view_position = normalize(u_camera_position - v_world_position);
 		vec3 normal_direction = normalize(v_normal);
 		vec3 reflection_direction = normalize(reflect(-light_position, normal_direction));
+		vec3 light_color =  attenuation * u_light_colors[i] * u_light_intensities[i];
 
 		float L_dot_N = clamp(dot(normal_direction, light_position), 0.0, 1.0);
 		float R_dot_V = clamp(dot(reflection_direction, view_position), 0.0, 1.0);
 
-		diffuse_component +=  attenuation * u_light_colors[i] * u_light_intensities[i] * L_dot_N;
-		specular_component += attenuation * u_light_colors[i] * u_light_intensities[i] * pow(R_dot_V, u_shininess);
+		diffuse_component += light_color * L_dot_N;
+		specular_component += light_color * pow(R_dot_V, u_shininess);
 	}
 
 	if(color.a < u_alpha_cutoff)
 		discard;
 
-	color.xyz *= ambient_component + diffuse_component + specular_component * 1.04;
+	color.xyz *= ambient_component + diffuse_component + specular_component;
 	FragColor = color;
 }
 

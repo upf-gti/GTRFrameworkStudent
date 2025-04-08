@@ -175,12 +175,14 @@ void CORE::mainLoop(CORE::Window* window, BaseApplication* app)
 		}
 		gputime.start();
 
+		////////////////////////
 		//render frame
 		GFX::startGPULabel("Frame");
 			GFX::checkGLErrors();
 			app->render();
 			GFX::checkGLErrors();
 		GFX::endGPULabel();
+		////////////////////////
 
 		//render graphical user interface
 		if (app->render_ui)

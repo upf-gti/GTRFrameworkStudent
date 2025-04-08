@@ -67,7 +67,6 @@ void Renderer::parseNode(SCN::Node* node, Camera* cam)
 		else {
 			this->draw_command_transparent_list.push_back(draw_command);
 		}
-		
 	}
 
 	// Store Children Prefab Entities
@@ -146,7 +145,7 @@ void Renderer::renderScene(SCN::Scene* scene, Camera* camera)
 		});
 
 	for (sDrawCommand draw_command : this->draw_command_opaque_list) {
-		renderMeshWithMaterial(draw_command.model, draw_command.mesh, draw_command.material);
+		this->renderMeshWithMaterial(draw_command.model, draw_command.mesh, draw_command.material);
 	}
 
 	glEnable(GL_BLEND);
@@ -159,7 +158,7 @@ void Renderer::renderScene(SCN::Scene* scene, Camera* camera)
 	glDisable(GL_BLEND);
 }
 
-
+// Renders the sky box of the scene
 void Renderer::renderSkybox(GFX::Texture* cubemap)
 {
 	Camera* camera = Camera::current;
@@ -230,29 +229,35 @@ void Renderer::renderMeshWithMaterial(const Matrix44 model, GFX::Mesh* mesh, SCN
 	vec3 light_ambient = this->scene->ambient_light;
 	vec3 light_positions[MAX_NUM_LIGHTS];
 	vec3 light_colors[MAX_NUM_LIGHTS];
-	float light_intensities[MAX_NUM_LIGHTS] = { 0 };
-	int light_types[MAX_NUM_LIGHTS] = { 0 };
 	vec3 light_directions[MAX_NUM_LIGHTS];
-	float light_cos_angle_max[MAX_NUM_LIGHTS];
-	float light_cos_angle_min[MAX_NUM_LIGHTS];
+	float light_intensities[MAX_NUM_LIGHTS] = { 0.0f };
+	float light_cos_angle_max[MAX_NUM_LIGHTS] = { 0.0f };
+	float light_cos_angle_min[MAX_NUM_LIGHTS] = { 0.0f };
+	int light_types[MAX_NUM_LIGHTS] = { 0 };
 
-	for (int i = 0; i < num_lights; i++) {
+	for (int i = 0; i < num_lights; i++) 
+	{
 		LightEntity* light = this->lights_list.at(i);
 		light_positions[i] = light->root.getGlobalMatrix().getTranslation();
 		light_intensities[i] = light->intensity;
 		light_types[i] = light->light_type;
 		light_colors[i] = light->color;
-		if (light->light_type == 2) {  //Spotlight specific
+		
+		if (light->light_type == 2) 
+		{  
+			//Spotlight specific
 			light_directions[i] = light->root.getGlobalMatrix().rotateVector(light->direction); //Transform direction to world space
-			light_cos_angle_min[i] = light->getCosAngleMin(); //Precomputed cosine (cone_info.x)
-			light_cos_angle_max[i] = light->getCosAngleMax(); //Precomputed cosine (cone_info.y)
+			light_cos_angle_max[i] = light->toCos(light->getCosAngleMax()); //Precomputed cosine (cone_info.y)
+			light_cos_angle_min[i] = light->toCos(light->getCosAngleMin()); //Precomputed cosine (cone_info.x)
 		}
-		else {
+		else 
+		{
 			light_directions[i] = vec3(0.0f); //Unused for non-spotlights
 			light_cos_angle_min[i] = 0.0f;
 			light_cos_angle_max[i] = 0.0f;
 		}
 	}
+	//exit(0);
 
 	shader->setUniform("u_num_lights", num_lights);
 	shader->setFloat("u_shininess", material->shininess);
@@ -291,11 +296,12 @@ void Renderer::renderMeshWithMaterial(const Matrix44 model, GFX::Mesh* mesh, SCN
 	glPolygonMode( GL_FRONT_AND_BACK, GL_FILL );
 }
 
+
+
 #ifndef SKIP_IMGUI
 
 void Renderer::showUI()
 {
-		
 	ImGui::Checkbox("Wireframe", &this->render_wireframe);
 	ImGui::Checkbox("Boundaries", &this->render_boundaries);
 

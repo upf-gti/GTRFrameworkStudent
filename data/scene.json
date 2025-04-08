@@ -36,8 +36,7 @@
 			"position":	[-0.78710675239562988, 0, -0.92928928136825562],
 			"scale":	[0.00999999977648258, 0.00999999977648258, 0.00999999977648258],
 			"rotation":	[0, 0.0138074457645416, 0, 0.99990469217300415],
-			"filename":	"prefabs/gmc/scene.gltf",
-			"type":	"PREFAB"
+			"filename":	"prefabs/gmc/scene.gltf"
 		}, {
 			"type":	"PREFAB",
 			"name":	"car2",
@@ -45,8 +44,7 @@
 			"position":	[-0.0500000007450581, 0, 2.3299999237060547],
 			"scale":	[0.0100000035017729, 0.00999999977648258, 0.0100000035017729],
 			"rotation":	[0, 0.99997788667678833, 0, 0.00664881197735667],
-			"filename":	"prefabs/gmc/scene.gltf",
-			"type":	"PREFAB"
+			"filename":	"prefabs/gmc/scene.gltf"
 		}, {
 			"type":	"PREFAB",
 			"name":	"house",
@@ -62,8 +60,7 @@
 			"position":	[1.1799999475479126, 0.479999989271164, -4],
 			"scale":	[0.0600000284612179, 0.0599999949336052, 0.0600000284612179],
 			"rotation":	[0, 0.99884951114654541, 0, 0.0479551218450069],
-			"filename":	"prefabs/sign.glb",
-			"type":	"PREFAB"
+			"filename":	"prefabs/sign.glb"
 		}, {
 			"type":	"PREFAB",
 			"name":	"house",
@@ -87,8 +84,7 @@
 			"position":	[0.47999969124794, 0.0900000035762787, 3.7400009632110596],
 			"scale":	[1.1123702526092529, 1.1123710870742798, 1.1123702526092529],
 			"rotation":	[-7.82176840657955e-12, 0.88628643751144409, -7.82175539615348e-12, 0.4631374180316925],
-			"filename":	"prefabs/tree.glb",
-			"type":	"PREFAB"
+			"filename":	"prefabs/tree.glb"
 		}, {
 			"type":	"LIGHT",
 			"name":	"spot",
