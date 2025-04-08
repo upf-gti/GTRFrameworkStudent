@@ -292,6 +292,7 @@ uniform float u_light_intensity[MAX_LIGHTS];
 uniform float u_light_type[MAX_LIGHTS];
 uniform vec3 u_light_position[MAX_LIGHTS];
 uniform vec3 u_light_color[MAX_LIGHTS];
+uniform vec3 u_light_direction[MAX_LIGHTS];
 
 uniform sampler2D u_texture_metallic_roughness;
 uniform float u_roughness;
@@ -328,13 +329,18 @@ void main()
 	for (int i=0; i<u_light_count; i++)
 	{
 		// diffuse
-		L = u_light_position[i] - v_world_position;
-		dist = length(L); // used in light intensity
+		if (u_light_type[i] == LT_DIRECTIONAL) {
+			L = u_light_direction[i];
+			light_intensity = u_light_color[i] * u_light_intensity[i]; // No attenuation for directional light
+
+		} else if (u_light_type[i] == LT_POINT) {
+			L = u_light_position[i] - v_world_position;
+			dist = length(L); // used in light intensity
+			light_intensity = u_light_color[i] * u_light_intensity[i] / pow(dist, 2); // light intensity reduced by distance
+		}
+
 		L = normalize(L);
 		N_dot_L = clamp(dot(N, L), 0.0, 1.0);
-
-		light_intensity = u_light_color[i] * u_light_intensity[i] / pow(dist, 2); // light intensity reduced by distance
-
 		diffuse_term = N_dot_L * light_intensity;
 
 		// specular
