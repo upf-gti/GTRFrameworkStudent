@@ -26,7 +26,7 @@ struct sDrawCommand {
 std::vector<sDrawCommand> draw_command_list;
 std::vector<sDrawCommand> transparentNodes;
 std::vector<sDrawCommand> opaqueNodes;
-
+std::vector<SCN::LightEntity*> lights;
 using namespace SCN;
 
 //some globals
@@ -100,7 +100,7 @@ void Renderer::parseNodes(SCN::Node* node, Camera* cam) {
 
 			//std::cout << "Nodo fuera de frustum: " << node->name << std::endl;
 
-			return; // está fuera del frustum, no lo renderizamos
+		//	return; // está fuera del frustum, no lo renderizamos
 		}
 
 		sDrawCommand draw_com;
@@ -123,7 +123,7 @@ void Renderer::parseSceneEntities(SCN::Scene* scene, Camera* cam) {
 	draw_command_list.clear();
 	opaqueNodes.clear();
 	transparentNodes.clear();
-
+	lights.clear(); 
 	for (int i = 0; i < scene->entities.size(); i++) {
 		BaseEntity* entity = scene->entities[i];
 
@@ -133,6 +133,10 @@ void Renderer::parseSceneEntities(SCN::Scene* scene, Camera* cam) {
 
 		if (entity->getType() == eEntityType::PREFAB) {
 			parseNodes(&((PrefabEntity*)entity)->root, cam);
+		}
+		else if (entity->getType() == eEntityType::LIGHT) {
+			LightEntity* lightEntity = (LightEntity*)entity;
+			lights.push_back(lightEntity);
 		}
 		// Store Prefab Entitys
 		// ...
@@ -233,7 +237,7 @@ void Renderer::renderMeshWithMaterial(const Matrix44 model, GFX::Mesh* mesh, SCN
 	glEnable(GL_DEPTH_TEST);
 
 	//chose a shader
-	shader = GFX::Shader::Get("texture");
+	shader = GFX::Shader::Get("phong");
 
 	assert(glGetError() == GL_NO_ERROR);
 
@@ -241,6 +245,7 @@ void Renderer::renderMeshWithMaterial(const Matrix44 model, GFX::Mesh* mesh, SCN
 	if (!shader)
 		return;
 	shader->enable();
+
 
 	material->bind(shader);
 
@@ -253,7 +258,45 @@ void Renderer::renderMeshWithMaterial(const Matrix44 model, GFX::Mesh* mesh, SCN
 
 	// Upload time, for cool shader effects
 	float t = getTime();
-	shader->setUniform("u_time", t);
+	shader->setUniform("u_time", t);	
+
+	const int MAX_LIGHTS = 100;
+	int numLights = std::min<int>(static_cast<int>(lights.size()), MAX_LIGHTS);
+
+
+	std::vector<Vector3f> lightPositions;
+	std::vector<Vector3f> lightColors;
+	std::vector<float> lightIntensities;
+	std::vector<int> lightTypes;
+
+	for (int i = 0; i < numLights; i++) {
+		SCN::LightEntity* light = lights[i];
+
+		// Tipo de luz (0: Punto, 1: Direccional)
+		int type = (light->light_type == SCN::eLightType::DIRECTIONAL) ? 1 : 0;
+		lightTypes.push_back(type);
+
+		if (type == 1) { // Direccional
+			Vector3f front = light->root.getGlobalMatrix().frontVector().normalize();
+			lightPositions.push_back(front);
+		}
+		else { // Puntual
+			Vector3f pos = light->root.getGlobalMatrix().getTranslation();
+			lightPositions.push_back(pos);
+		}
+
+		lightColors.push_back(light->color);
+		lightIntensities.push_back(light->intensity);
+	}
+
+
+	// Enviar uniformes al shader
+	shader->setUniform("u_numLights", numLights);
+	shader->setUniform3Array("u_light_pos", reinterpret_cast<float*>(lightPositions.data()), numLights);
+	shader->setUniform3Array("u_light_color", reinterpret_cast<float*>(lightColors.data()), numLights);
+	shader->setUniform1Array("u_light_intensity", lightIntensities.data(), numLights);
+	shader->setUniform1Array("u_light_type", lightTypes.data(), numLights);
+	shader->setUniform("u_ambient_light", scene->ambient_light);
 
 	// Render just the verticies as a wireframe
 	if (render_wireframe)

@@ -5,6 +5,7 @@ skybox basic.vs skybox.fs
 depth quad.vs depth.fs
 multi basic.vs multi.fs
 compute test.cs
+phong basic.vs phong.fs
 
 \test.cs
 #version 430 core
@@ -223,4 +224,77 @@ void main()
 
 	//calcule the position of the vertex using the matrices
 	gl_Position = u_viewprojection * vec4( v_world_position, 1.0 );
+}
+
+\phong.fs
+#version 330 core
+
+#define MAX_LIGHTS 100
+
+uniform int u_numLights;
+in vec3 v_world_position;
+in vec3 v_normal;
+in vec2 v_uv;
+
+uniform float u_alpha_cutoff;
+uniform vec3 u_camera_position;
+uniform vec4 u_color;
+uniform sampler2D u_texture;
+
+// Información de las luces
+uniform vec3 u_light_pos[MAX_LIGHTS];
+uniform vec3 u_light_color[MAX_LIGHTS];	
+uniform float u_light_intensity[MAX_LIGHTS];
+uniform int u_light_type[MAX_LIGHTS]; // 0: punto, 1: direccional
+
+// Luz ambiental global
+uniform vec3 u_ambient_light;
+uniform float u_shininess; // Brillo del material
+
+out vec4 FragColor;
+
+void main() {
+    // === Color base como en texture.fs ===
+    vec4 tex_color = texture(u_texture, v_uv);
+    vec4 color = tex_color * u_color;
+
+    if (color.a < u_alpha_cutoff)
+        discard;
+
+    vec3 base_color = color.rgb;
+
+    // === Componentes Phong ===
+    vec3 ambient = u_ambient_light * base_color;
+    vec3 diffuse_total = vec3(0.0);
+    vec3 specular_total = vec3(0.0);
+
+    vec3 N = normalize(v_normal);
+    vec3 V = normalize(u_camera_position - v_world_position);
+
+    for (int i = 0; i < u_numLights; i++) {
+        vec3 L;
+        float attenuation = 1.0;
+
+        if (u_light_type[i] == 0) { // Luz de punto
+            L = normalize(u_light_pos[i] - v_world_position);
+            float distance = length(u_light_pos[i] - v_world_position);
+            attenuation = 1.0 / (distance * distance);
+        }
+        else if (u_light_type[i] == 1) { // Luz direccional
+            L = normalize(-u_light_pos[i]); // Dirección inversa
+            attenuation = 1.0;
+        }
+
+        // Difusa
+        float N_dot_L = clamp(dot(N, L), 0.0, 1.0);
+        diffuse_total += base_color * N_dot_L * u_light_color[i] * u_light_intensity[i] * attenuation;
+
+        // Especular
+        vec3 R = reflect(L, N);
+        float R_dot_V = clamp(dot(R, V), 0.0, 1.0);
+        specular_total += u_light_color[i] * u_light_intensity[i] * attenuation * pow(R_dot_V, u_shininess);
+    }
+
+    vec3 final_color = ambient + diffuse_total + specular_total;
+    FragColor = vec4(final_color, color.a);
 }
