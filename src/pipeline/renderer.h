@@ -36,30 +36,33 @@ namespace SCN {
 		bool render_boundaries;
 		GFX::Texture* skybox_cubemap;
 		SCN::Scene* scene;
-		std::vector<sDrawCommand> draw_command_opaque_list;
-		std::vector<sDrawCommand> draw_command_transparent_list;
-		std::vector<LightEntity*> lights_list;
-		
+		std::vector<sDrawCommand> draw_command_opaque_list;		// Lab 1
+		std::vector<sDrawCommand> draw_command_transparent_list;// Lab 1
+		std::vector<LightEntity*> lights_list;					// Lab 2
+
 		//updated every frame
 		Renderer(const char* shaders_atlas_filename );
 
 		//just to be sure we have everything ready for the rendering
 		void setupScene();
 
-		//add here your functions
-		//...
+		//initialises the draw command lists for one entity
 		void parseNode(SCN::Node* node, Camera* cam);
 
+		//initialises the draw command and lights lists for all entities
 		void parseSceneEntities(SCN::Scene* scene, Camera* camera);
 
 		//renders several elements of the scene
 		void renderScene(SCN::Scene* scene, Camera* camera);
 
 		//render the skybox
-		void renderSkybox(GFX::Texture* cubemap);
+		void renderSkybox(GFX::Texture* cubemap) const;
 
 		//to render one mesh given its material and transformation matrix
 		void renderMeshWithMaterial(const Matrix44 model, GFX::Mesh* mesh, SCN::Material* material);
+
+		//render the shadows given all lights (LAB 3)
+		void renderShadows(LightEntity* light);
 
 		void showUI();
 	};

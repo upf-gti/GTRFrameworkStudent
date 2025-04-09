@@ -75,11 +75,11 @@ void Renderer::parseNode(SCN::Node* node, Camera* cam)
 	}
 }
 
+// HERE =====================
+// TODO: GENERATE RENDERABLES
+// ==========================
 void Renderer::parseSceneEntities(SCN::Scene* scene, Camera* cam) 
 {
-	// HERE =====================
-	// TODO: GENERATE RENDERABLES
-	// ==========================
 	this->draw_command_opaque_list.clear();
 	this->draw_command_transparent_list.clear();
 	this->lights_list.clear();
@@ -101,32 +101,32 @@ void Renderer::parseSceneEntities(SCN::Scene* scene, Camera* cam)
 		if (entity->getType() == eEntityType::LIGHT) {
 			this->lights_list.push_back((LightEntity*)entity);
 		}
-
-		// ...
 	}
 }
 
+// HERE =====================
+// TODO: RENDER RENDERABLES
+// Entities --> opaque, transparents, lights
+// Skybox
+// Shadows: per a cada llum, fbo->bind, renderitzar l'escena des del punt de vista de la càmera-llum 
+// ==========================
 void Renderer::renderScene(SCN::Scene* scene, Camera* camera)
 {
 	this->scene = scene;
 	this->setupScene();
 	this->parseSceneEntities(scene, camera);
 
-	//set the clear color (the background color)
+	// Set the clear color (the background color)
 	glClearColor(scene->background_color.x, scene->background_color.y, scene->background_color.z, 1.0);
 
 	// Clear the color and the depth buffer
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 	GFX::checkGLErrors();
 
-	//render skybox
+	// Render skybox
 	if (this->skybox_cubemap) {
 		this->renderSkybox(this->skybox_cubemap);
 	}
-
-	// HERE =====================
-	// TODO: RENDER RENDERABLES
-	// ==========================
 	
 	// Sort opaque objects from nearest to farthest
 	std::sort(this->draw_command_opaque_list.begin(), this->draw_command_opaque_list.end(),
@@ -144,22 +144,33 @@ void Renderer::renderScene(SCN::Scene* scene, Camera* camera)
 			return distA > distB; // Farthest first
 		});
 
+	///////////////////////////////////////////
+	// TODO: Render shadows
+	//for (LightEntity* light : this->lights_list) {
+	//	this->renderShadows(light);
+	//}
+	///////////////////////////////////////////
+
+	// Render opaque entities
 	for (sDrawCommand draw_command : this->draw_command_opaque_list) {
-		this->renderMeshWithMaterial(draw_command.model, draw_command.mesh, draw_command.material);
+		this->renderMeshWithMaterial(draw_command.model, 
+			draw_command.mesh, draw_command.material);
 	}
 
 	glEnable(GL_BLEND);
 	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
+	// Render transparent entities
 	for (sDrawCommand draw_command : this->draw_command_transparent_list) {
-		this->renderMeshWithMaterial(draw_command.model, draw_command.mesh, draw_command.material);
+		this->renderMeshWithMaterial(draw_command.model, 
+			draw_command.mesh, draw_command.material);
 	}
 
 	glDisable(GL_BLEND);
 }
 
 // Renders the sky box of the scene
-void Renderer::renderSkybox(GFX::Texture* cubemap)
+void Renderer::renderSkybox(GFX::Texture* cubemap) const
 {
 	Camera* camera = Camera::current;
 
@@ -243,22 +254,21 @@ void Renderer::renderMeshWithMaterial(const Matrix44 model, GFX::Mesh* mesh, SCN
 		light_types[i] = light->light_type;
 		light_colors[i] = light->color;
 		
-		if (light->light_type == 2) 
+		if (light->light_type == eLightType::SPOT)
 		{  
-			//Spotlight specific
-			light_directions[i] = light->root.getGlobalMatrix().rotateVector(light->direction); //Transform direction to world space
-			light_cos_angle_max[i] = light->toCos(light->getCosAngleMax()); //Precomputed cosine (cone_info.y)
-			light_cos_angle_min[i] = light->toCos(light->getCosAngleMin()); //Precomputed cosine (cone_info.x)
+			light_directions[i] = light->root.getGlobalMatrix().rotateVector(light->direction);
+			light_cos_angle_max[i] = light->toCos(light->getCosAngleMax());
+			light_cos_angle_min[i] = light->toCos(light->getCosAngleMin());
 		}
 		else 
 		{
-			light_directions[i] = vec3(0.0f); //Unused for non-spotlights
+			light_directions[i] = vec3(0.0f); 
 			light_cos_angle_min[i] = 0.0f;
 			light_cos_angle_max[i] = 0.0f;
 		}
 	}
-	//exit(0);
 
+	// Upload light information
 	shader->setUniform("u_num_lights", num_lights);
 	shader->setFloat("u_shininess", material->shininess);
 	shader->setUniform3("u_light_ambient", light_ambient);
@@ -270,7 +280,7 @@ void Renderer::renderMeshWithMaterial(const Matrix44 model, GFX::Mesh* mesh, SCN
 	shader->setUniform1Array("u_light_cos_angle_min", (float*)light_cos_angle_min, num_lights);
 	shader->setUniform1Array("u_light_cos_angle_max", (float*)light_cos_angle_max, num_lights);
 
-	//upload uniforms
+	// Upload model matrix
 	shader->setUniform("u_model", model);
 	
 	// Upload camera uniforms
@@ -296,7 +306,56 @@ void Renderer::renderMeshWithMaterial(const Matrix44 model, GFX::Mesh* mesh, SCN
 	glPolygonMode( GL_FRONT_AND_BACK, GL_FILL );
 }
 
+//to render shadows (lab 3)
+void Renderer::renderShadows(LightEntity *light) 
+{
+	// Create the shadow frame buffer object
+	GFX::FBO* shadow_FBO = new GFX::FBO();
+	shadow_FBO->setDepthOnly(1024, 1024);
 
+	GFX::Shader* shader = new GFX::Shader();
+	if (!shader)
+		return;
+	shader->enable();
+
+	// Rendering
+	shadow_FBO->bind();
+
+	glColorMask(false, false, false, false);
+	glClear(GL_DEPTH_BUFFER_BIT);
+
+	// Configure the light camera
+	Camera* light_camera = new Camera();
+
+	mat4 light_model = light->root.getGlobalMatrix();
+	vec3 light_position = light_model.getTranslation();
+	vec3 light_center = light_model * vec3(0.0f, 0.0f, -1.0f);
+	vec3 light_up = vec3(0.0f, 1.0f, 0.0f);
+
+	light_camera->lookAt(light_position, light_center, light_up);
+
+	float half_size = light->area / 2.0f;
+	float near_plane = light->near_distance;
+	float far_plane = light->max_distance;
+
+	light_camera->setOrthographic(-half_size, half_size,
+		-half_size, half_size, near_plane, far_plane);
+
+	// Render the meshes with the point of view of the light camera
+	for (sDrawCommand& draw_command : this->draw_command_opaque_list) {
+		this->renderMeshWithMaterial(draw_command.model,
+			draw_command.mesh, draw_command.material);
+	}
+
+	shader->setTexture("u_shadows", shadow_FBO->depth_texture, 2);
+
+	// Check parameters of the orthographic first!
+	glColorMask(true, true, true, true);
+
+	shadow_FBO->unbind();
+
+	delete[] shadow_FBO;
+}
 
 #ifndef SKIP_IMGUI
 
