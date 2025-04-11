@@ -227,7 +227,8 @@ bool Shader::hasInfoLog() const
 
 bool Shader::compileRasterShaderFromMemory(const std::string& vsm, const std::string& psm)
 {
-	assert(glGetError() == GL_NO_ERROR);
+    uint32_t i = glGetError();
+    assert(i == GL_NO_ERROR);
 
 	if (glCreateProgram == 0)
 	{
@@ -483,12 +484,15 @@ void Shader::computeDispatch(	const uint32_t dispatch_x,
 	if (s_type != COMPUTE_SHADER) {
 		std::cout << "[ERROR] Trying to dispatch a non-compute shader." << std::endl;
 	}
-
+#ifndef __APPLE__
 	glDispatchCompute(dispatch_x, dispatch_y, dispatch_z);
 
 	if (wait_for) {
 		glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
 	}
+#else
+    assert(0u && "Apple does not support compute shaders");
+#endif // __APPLE__
 }
 
 void Shader::saveShaderInfoLog(GLuint obj )
@@ -580,12 +584,14 @@ GLint Shader::getLocation(const char* varname, bool is_block )
 
 int Shader::getAttribLocation(const char* varname)
 {
-	int loc = glGetAttribLocation(program, varname);
+    int loc = glGetAttribLocation(program, varname);
+    
 	if (loc == -1)
 	{
 		return loc;
 	}
-	assert(glGetError() == GL_NO_ERROR);
+    int i = glGetError();
+	assert(i == GL_NO_ERROR);
 
 	return loc;
 }
@@ -848,17 +854,17 @@ Shader* Shader::getDefaultShader(std::string name)
 	if (it != s_Shaders.end())
 		return it->second;
 
-	std::string vs = "";
-	std::string fs = "";
+	std::string vs = "#version 330\n ";
+	std::string fs = "#version 330\n ";
 
-	vs = "attribute vec3 a_vertex; attribute vec3 a_normal; attribute vec2 a_uv; attribute vec4 a_color; \
+	vs = "#version 330\n in vec3 a_vertex; in vec3 a_normal; in vec2 a_uv; in vec4 a_color; \
 	uniform mat4 u_model;\n\
 	uniform mat4 u_viewprojection;\n\
-	varying vec3 v_position;\n\
-	varying vec3 v_world_position;\n\
-	varying vec4 v_color;\n\
-	varying vec3 v_normal;\n\
-	varying vec2 v_uv;\n\
+	out vec3 v_position;\n\
+	out vec3 v_world_position;\n\
+	out vec4 v_color;\n\
+	out vec3 v_normal;\n\
+	out vec2 v_uv;\n\
 	void main()\n\
 	{\n\
 		v_normal = (u_model * vec4(a_normal, 0.0)).xyz;\n\
@@ -871,7 +877,7 @@ Shader* Shader::getDefaultShader(std::string name)
 
 	if (name == "flat2D")
 	{
-		vs = "attribute vec2 a_vertex;\n\
+		vs = "#version 330\n in vec2 a_vertex;\n\
 		uniform mat4 u_viewprojection;\n\
 		void main()\n\
 		{\n\
@@ -882,34 +888,38 @@ Shader* Shader::getDefaultShader(std::string name)
 
 	if (name == "flat" || name == "flat2D")
 	{
-		fs = "uniform vec4 u_color;\n\
+		fs = "#version 330\n uniform vec4 u_color;\n\
+            out vec4 out_color;\n\
 			void main() {\n\
-				gl_FragColor = u_color;\n\
+				out_color = u_color;\n\
 			}";
 	}
 	else if (name == "color")
 	{
-		fs = "varying vec4 v_color;\n\
+		fs = "#version 330\n in vec4 v_color;\n\
 			uniform vec4 u_color;\n\
+                    out vec4 out_color;\n\
 			void main() {\n\
-				gl_FragColor = v_color * u_color;\n\
+				out_color = v_color * u_color;\n\
 			}";
 	}
 	else if(name == "texture")
 	{
-		fs = "uniform vec4 u_color;\n\
+		fs = "#version 330\n uniform vec4 u_color;\n\
 			uniform sampler2D u_texture;\n\
-			varying vec2 v_uv;\n\
+			in vec2 v_uv;\n\
+                    out vec4 out_color;\n\
 			void main() {\n\
-				gl_FragColor = u_color * texture2D(u_texture, v_uv);\n\
+				out_color = u_color * texture2D(u_texture, v_uv);\n\
 			}";
 	}
 	else if (name == "grid")
 	{
-		fs = "uniform vec4 u_color;\n\
-			varying vec4 v_color;\n\
+		fs = "#version 330\n uniform vec4 u_color;\n\
+			in vec4 v_color;\n\
 			uniform vec3 u_camera_position;\n\
-			varying vec3 v_world_position;\n\
+			in vec3 v_world_position;\n\
+                    out vec4 out_color;\n\
 			void main() {\n\
 				vec4 color = u_color * v_color;\n\
 				color.a *= pow( 1.0 - length(v_world_position.xz - u_camera_position.xz) / 5000.0, 4.5);\n\
@@ -918,83 +928,88 @@ Shader* Shader::getDefaultShader(std::string name)
 				if(v_world_position.z == 0.0)\n\
 					color.xyz = vec3(0.5, 0.5, 1.0);\n\
 				vec3 E = normalize(v_world_position - u_camera_position);\n\
-				gl_FragColor = color;\n\
+				out_color = color;\n\
 			}";
 	}
 	else if (name == "screen") //draws a quad fullscreen
 	{
-		vs = "attribute vec3 a_vertex; \
-			varying vec2 v_uv;\n\
+		vs = "#version 330\n in vec3 a_vertex; \
+			out vec2 v_uv;\n\
 			void main()\n\
 			{\n\
 				v_uv = a_vertex.xy * 0.5 + vec2(0.5);\n\
 				gl_Position = vec4(a_vertex.xy,0.0,1.0);\n\
 			}";
-		fs = "varying vec2 v_uv;\n\
+		fs = "#version 330\n in vec2 v_uv;\n\
 			uniform sampler2D u_texture;\n\
+                    out vec4 out_color;\n\
 			void main() {\n\
-				gl_FragColor = texture2D( u_texture, v_uv );\n\
+				out_color = texture2D( u_texture, v_uv );\n\
 			}";
 	}
 	else if (name == "linear_depth")
 	{
-		vs = "attribute vec3 a_vertex; \
-			varying vec2 v_uv;\n\
+		vs = "#version 330\n in vec3 a_vertex; \
+			out vec2 v_uv;\n\
 			void main()\n\
 			{\n\
 				v_uv = a_vertex.xy * 0.5 + vec2(0.5);\n\
 				gl_Position = vec4(a_vertex.xy,0.0,1.0);\n\
 			}";
-		fs = "uniform vec2 u_camera_nearfar;\n\
+		fs = "#version 330\n uniform vec2 u_camera_nearfar;\n\
 		uniform sampler2D u_texture; //depth map\n\
-		varying vec2 v_uv;\n\
+		in vec2 v_uv;\n\
+                    out vec4 out_color;\n\
 		void main()\n\
 		{\n\
 			float n = u_camera_nearfar.x;\n\
 			float f = u_camera_nearfar.y;\n\
 			float z = texture2D(u_texture, v_uv).x;\n\
 			float color = n * (z + 1.0) / (f + n - z * (f - n));\n\
-			gl_FragColor = vec4(color);\n\
+			out_color = vec4(color);\n\
 		}";
 	}
 	else if (name == "screen_depth") //draws a quad fullscreen and clones its depth
 	{
-		vs = "attribute vec3 a_vertex; \
-			varying vec2 v_uv;\n\
+		vs = "#version 330\n in vec3 a_vertex; \
+			out vec2 v_uv;\n\
 			void main()\n\
 			{\n\
 				v_uv = a_vertex.xy * 0.5 + vec2(0.5);\n\
 				gl_Position = vec4(a_vertex.xy,0.0,1.0);\n\
 			}";
-		fs = "varying vec2 v_uv;\n\
+		fs = "#version 330\n in vec2 v_uv;\n\
 			uniform sampler2D u_texture;\n\
+                    out vec4 out_color;\n\
 			void main() {\n\
 				vec4 color = texture2D( u_texture, v_uv );\n\
-				gl_FragColor = color;\n\
+				out_color = color;\n\
 				gl_FragDepth = color.r;\n\
 			}";
 	}
 	else if (name == "quad" || name == "textured_quad") //draws a quad
 	{
-		vs = "attribute vec3 a_vertex;\n\
+		vs = "#version 330\n in vec3 a_vertex;\n\
 			uniform vec4 u_pos_size;\n\
-			varying vec2 v_uv;\n\
+			out vec2 v_uv;\n\
 			void main()\n\
 			{\n\
 				v_uv = vec2( a_vertex.x, 1.0 - a_vertex.y );\n\
 				gl_Position = vec4( a_vertex.xy * u_pos_size.zw + u_pos_size.xy,0.0,1.0);\n\
 			}";
 		if(name == "textured_quad")
-			fs = "varying vec2 v_uv;\n\
+			fs = "#version 330\n in vec2 v_uv;\n\
 			uniform vec4 u_color;\n\
 			uniform sampler2D u_texture;\n\
+                        out vec4 out_color;\n\
 			void main() {\n\
-				gl_FragColor = u_color * texture2D( u_texture, v_uv );\n\
+				out_color = u_color * texture2D( u_texture, v_uv );\n\
 			}";
 		else
-			fs = "uniform vec4 u_color;\n\
+			fs = "#version 330\n uniform vec4 u_color;\n\
+                        out vec4 out_color;\n\
 			void main() {\n\
-				gl_FragColor = u_color;\n\
+				out_color = u_color;\n\
 			}";
 	}
 	else
@@ -1064,6 +1079,8 @@ bool Shader::_ProcessShaderAtlas(const char* filename, const char* base_path_cst
 	std::string shaders = s_shader_files[""];
 
 	shader_lines = tokenize(shaders, "\n");
+    
+    return true;
 }
 
 bool Shader::LoadAtlas(const char* filename, const char* base_path_cstr)
@@ -1256,7 +1273,7 @@ Shader* Shader::CompileShader(const eShaderType type, const char* name, const ch
 
 	bool compile_shader_result;
 	if (type == COMPUTE_SHADER) {
-		compile_shader_result = shader->compileComputeShaderFromMemory(vs.c_str());
+		//compile_shader_result = shader->compileComputeShaderFromMemory(vs.c_str());
 	} else {
 		compile_shader_result = shader->compileRasterShaderFromMemory(vs.c_str(), fs.c_str());
 	}

@@ -24,18 +24,32 @@ long getTime()
 }
 
 //this function is used to access OpenGL Extensions (special features not supported by all cards)
-void* getGLProcAddress(const char* name)
+SDL_FunctionPointer getGLProcAddress(const char* name)
 {
 	return SDL_GL_GetProcAddress(name);
 }
 
 std::string getFolderName(std::string path)
 {
-	path = cleanPath(path); //remove weird slashes
+    path = cleanPath(path); //remove weird slashes
 	size_t pos = path.find_last_of('/');
 	if (pos == std::string::npos)
 		return "";
 	return path.substr(0, pos);
+}
+
+std::string getRelativePath(std::string path) {
+    std::string new_path = path;
+    
+    // NOTE: Relative paths hacks, this needs to be done properly
+#ifdef XCODE_IDE
+    new_path = "../../" + new_path;
+#elifdef __APPLE__
+    // If its apple but not vscode, then assume that we are running in cmake
+    new_path = "../" + new_path;
+#endif
+    
+    return new_path;
 }
 
 std::string getExtension(std::string path)

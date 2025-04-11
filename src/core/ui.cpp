@@ -36,7 +36,7 @@ void UI::init()
 	style.Colors[ImGuiCol_FrameBg] = ImVec4(.15f, .15f, .15f, 1);
 	style.Colors[ImGuiCol_FrameBgActive] = ImVec4(.3f, .3f, .3f, 1);
 
-	icons = GFX::Texture::Get("data/textures/icons.png");
+	icons = GFX::Texture::Get(getRelativePath("data/textures/icons.png").c_str());
 #endif
 }
 

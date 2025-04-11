@@ -45,9 +45,6 @@ namespace GFX {
 
 	bool checkGLErrors()
 	{
-#ifndef _DEBUG
-		return true;
-#endif
 
 		GLenum errCode;
 		const GLubyte* errString;
@@ -56,6 +53,8 @@ namespace GFX {
 #ifndef GCC
 			errString = gluErrorString(errCode);
 			std::cerr << "OpenGL Error: " << (errString ? (const char*)errString : "NO ERROR STRING") << std::endl;
+#else
+            std::cout << "OpenGL Error: " << errCode << std::endl;
 #endif
 			assert(0);
 			return false;
@@ -105,7 +104,11 @@ namespace GFX {
 
 	bool drawText(float x, float y, std::string text, Vector4f c, float scale)
 	{
-		static char buffer[99999]; // ~500 chars
+#ifdef __APPLE__
+        // TODO: RESTORE THIS ON MAC OS
+        return true;
+#endif
+        static char buffer[99999]; // ~500 chars
 		int num_quads;
 
 		if (scale == 0)
@@ -132,11 +135,13 @@ namespace GFX {
 		shader->setUniform("u_color", c);
 
 		int loc = shader->getAttribLocation("a_vertex");
-		glEnableVertexAttribArray(loc);
+        checkGLErrors();
+		//glEnableVertexAttribArray(loc);
 		glVertexAttribPointer(loc, 2, GL_FLOAT, GL_FALSE, 16, buffer);
+        checkGLErrors();
 		glDrawArrays(GL_QUADS, 0, num_quads * 4);
-		glEnableVertexAttribArray(0);
-
+		//glEnableVertexAttribArray(0);
+        checkGLErrors();
 		return true;
 	}
 

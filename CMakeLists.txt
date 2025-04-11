@@ -110,6 +110,9 @@ endif()
 if (APPLE)
     find_library(cocoa_lib Cocoa REQUIRED)
     target_link_libraries(${PROJECT_NAME} PRIVATE ${cocoa_lib})
+    if (CMAKE_GENERATOR STREQUAL Xcode)
+	target_compile_definitions(${PROJECT_NAME} PUBLIC "XCODE_IDE")
+    endif()
 endif()
 
 # sdl2
@@ -119,7 +122,7 @@ include_directories(${PROJECT_NAME} libraries/SDL/include)
 include_directories(${PROJECT_NAME} libraries/glew-cmake/include)
 
 #opengl
-target_link_libraries(${PROJECT_NAME} SDL3::SDL3 libglew_static OpenGL::GL OpenGL::GLU)
+target_link_libraries(${PROJECT_NAME} PUBLIC SDL3::SDL3 libglew_static OpenGL::GL OpenGL::GLU)
 
 # Properties
 set_target_properties(${PROJECT_NAME} PROPERTIES CXX_STANDARD 20)

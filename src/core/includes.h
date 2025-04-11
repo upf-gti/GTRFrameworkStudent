@@ -21,8 +21,8 @@
 	#include <GL/glew.h>
 #endif
 
-#define OPENGL_VERSION_MAJOR 4
-#define OPENGL_VERSION_MINOR 3
+#define OPENGL_VERSION_MAJOR 3
+#define OPENGL_VERSION_MINOR 0
 
 //SDL
 //#pragma comment(lib, "SDL2.lib")
