@@ -338,8 +338,13 @@ void Renderer::renderShadows(LightEntity *light)
 	float near_plane = light->near_distance;
 	float far_plane = light->max_distance;
 
-	light_camera->setOrthographic(-half_size, half_size,
-		-half_size, half_size, near_plane, far_plane);
+	if (light->light_type == 3) {
+		light_camera->setOrthographic(-half_size, half_size,
+			-half_size, half_size, near_plane, far_plane);
+	}
+	else if (light->light_type == 2) {
+		light_camera->setPerspective(2.0f * light->cone_info.y, 1.0f, near_plane, far_plane);
+	}
 
 	// Render the meshes with the point of view of the light camera
 	for (sDrawCommand& draw_command : this->draw_command_opaque_list) {
