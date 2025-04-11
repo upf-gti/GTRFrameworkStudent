@@ -231,6 +231,34 @@ void main()
 
 #define MAX_LIGHTS 100
 
+
+mat3 cotangentFrame(vec3 N, vec3 p, vec2 uv) {
+  // get edge vectors of the pixel triangle
+  vec3 dp1 = dFdx(p);
+  vec3 dp2 = dFdy(p);
+  vec2 duv1 = dFdx(uv);
+  vec2 duv2 = dFdy(uv);
+
+  // solve the linear system
+  vec3 dp2perp = cross(dp2, N);
+  vec3 dp1perp = cross(N, dp1);
+  vec3 T = dp2perp * duv1.x + dp1perp * duv2.x;
+  vec3 B = dp2perp * duv1.y + dp1perp * duv2.y;
+
+  // construct a scale-invariant frame 
+  float invmax = 1.0 / sqrt(max(dot(T,T), dot(B,B)));
+  return mat3(normalize(T * invmax), normalize(B * invmax), N);
+}
+
+#pragma glslify: export(cotangentFrame)
+
+vec3 perturbNormal(vec3 N, vec3 WP, vec2 uv, vec3 normal_pixel)
+{
+	normal_pixel = normal_pixel * 255./127. - 128./127.;
+	mat3 TBN = cotangentFrame(N, WP, uv);
+	return normalize(TBN * normal_pixel);
+}
+
 uniform int u_numLights;
 in vec3 v_world_position;
 in vec3 v_normal;
@@ -250,6 +278,10 @@ uniform int u_light_type[MAX_LIGHTS]; // 0: punto, 1: direccional
 // Luz ambiental global
 uniform vec3 u_ambient_light;
 uniform float u_shininess; // Brillo del material
+
+// Luz spotlight
+uniform vec3 u_light_direction[MAX_LIGHTS]; // D: Dirección del spotlight (cono)
+uniform vec2 u_light_cone_info[MAX_LIGHTS]; // x: alpha_min, y: alpha_max (¡en radianes!)
 
 out vec4 FragColor;
 
@@ -284,6 +316,28 @@ void main() {
             L = normalize(-u_light_pos[i]); // Dirección inversa
             attenuation = 1.0;
         }
+		else if (u_light_type[i] == 2) { // Spotlight
+			vec3 lightToFrag = v_world_position - u_light_pos[i];
+			float distance = length(lightToFrag);
+			L = normalize(-lightToFrag); // vector desde el fragmento hacia la luz
+    
+			vec3 D = normalize(u_light_direction[i]);
+			float cos_angle = dot(L, D); // L • D
+
+			float cos_alpha_min = cos(u_light_cone_info[i].x);
+			float cos_alpha_max = cos(u_light_cone_info[i].y);
+
+			float spot_factor = 0.0;
+			if (cos_angle >= cos_alpha_max) {
+				spot_factor = clamp(
+					(cos_angle - cos_alpha_max) / (cos_alpha_min - cos_alpha_max),
+					0.0, 1.0
+				);
+			}
+
+			attenuation = (1.0 / (distance * distance)) * spot_factor;
+		}
+
 
         // Difusa
         float N_dot_L = clamp(dot(N, L), 0.0, 1.0);

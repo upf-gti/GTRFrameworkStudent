@@ -269,16 +269,38 @@ void Renderer::renderMeshWithMaterial(const Matrix44 model, GFX::Mesh* mesh, SCN
 	std::vector<float> lightIntensities;
 	std::vector<int> lightTypes;
 
+	std::vector<Vector3f> lightDirections;
+	std::vector<Vector2f> lightConeInfo;
+
 	for (int i = 0; i < numLights; i++) {
 		SCN::LightEntity* light = lights[i];
 
 		// Tipo de luz (0: Punto, 1: Direccional)
-		int type = (light->light_type == SCN::eLightType::DIRECTIONAL) ? 1 : 0;
+		int type = 0; // 0: Punto, 1: Direccional, 2: Spotlight
+
+		if (light->light_type == SCN::eLightType::DIRECTIONAL) {
+			type = 1;
+		}
+		else if (light->light_type == SCN::eLightType::SPOT) {
+			type = 2;
+		}
+
 		lightTypes.push_back(type);
 
 		if (type == 1) { // Direccional
 			Vector3f front = light->root.getGlobalMatrix().frontVector().normalize();
 			lightPositions.push_back(front);
+		}
+		else if (type == 2) {
+			Vector3f pos = light->root.getGlobalMatrix().getTranslation();
+			Vector3f dir = light->root.getGlobalMatrix().frontVector().normalize();
+
+			lightPositions.push_back(pos);
+			lightDirections.push_back(dir);
+
+			float alpha_min = DEG2RAD * light->cone_info.x;
+			float alpha_max = DEG2RAD * light->cone_info.y;
+			lightConeInfo.push_back(Vector2f(alpha_min, alpha_max));
 		}
 		else { // Puntual
 			Vector3f pos = light->root.getGlobalMatrix().getTranslation();
@@ -297,6 +319,9 @@ void Renderer::renderMeshWithMaterial(const Matrix44 model, GFX::Mesh* mesh, SCN
 	shader->setUniform1Array("u_light_intensity", lightIntensities.data(), numLights);
 	shader->setUniform1Array("u_light_type", lightTypes.data(), numLights);
 	shader->setUniform("u_ambient_light", scene->ambient_light);
+
+	shader->setUniform3Array("u_light_direction", reinterpret_cast<float*>(lightDirections.data()), numLights);
+	shader->setUniform2Array("u_light_cone_info", reinterpret_cast<float*>(lightConeInfo.data()), numLights);
 
 	// Render just the verticies as a wireframe
 	if (render_wireframe)
