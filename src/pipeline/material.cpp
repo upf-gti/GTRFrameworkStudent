@@ -91,13 +91,25 @@ void Material::bind(GFX::Shader* shader) {
 		// ==========================
 
 		// We always force a default albedo texture
-		if (texture == NULL)
+
+		GFX::Texture* normal_map = textures[SCN::eTextureChannel::NORMALMAP].texture;
+
+		if (texture == NULL) {
 			texture = GFX::Texture::getWhiteTexture(); //a 1x1 white texture
+		}
+		if (normal_map == NULL) {
+			normal_map = GFX::Texture::getBlackTexture(); //a 1x1 white texture
+
+		}
 
 		shader->setUniform("u_color", color);
 
-		if (texture)
+		if (texture) {
 			shader->setUniform("u_texture", texture, 0);
+		}
+		if (normal_map) {
+			shader->setUniform("u_texture_normal", normal_map, 1);
+		}
 
 		// This is used to say which is the alpha threshold to what we should not paint a pixel on the screen (to cut polygons according to texture alpha)
 		shader->setUniform("u_alpha_cutoff", alpha_mode == SCN::eAlphaMode::MASK ? alpha_cutoff : 0.001f);

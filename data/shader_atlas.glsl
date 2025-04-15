@@ -250,8 +250,6 @@ mat3 cotangentFrame(vec3 N, vec3 p, vec2 uv) {
   return mat3(normalize(T * invmax), normalize(B * invmax), N);
 }
 
-#pragma glslify: export(cotangentFrame)
-
 vec3 perturbNormal(vec3 N, vec3 WP, vec2 uv, vec3 normal_pixel)
 {
 	normal_pixel = normal_pixel * 255./127. - 128./127.;
@@ -268,6 +266,7 @@ uniform float u_alpha_cutoff;
 uniform vec3 u_camera_position;
 uniform vec4 u_color;
 uniform sampler2D u_texture;
+uniform sampler2D u_texture_normal;
 
 // Información de las luces
 uniform vec3 u_light_pos[MAX_LIGHTS];
@@ -300,7 +299,8 @@ void main() {
     vec3 diffuse_total = vec3(0.0);
     vec3 specular_total = vec3(0.0);
 
-    vec3 N = normalize(v_normal);
+    vec3 normal_pixel = texture(u_texture_normal, v_uv).rgb;
+    vec3 N = perturbNormal(normalize(v_normal), v_world_position, v_uv, normal_pixel);
     vec3 V = normalize(u_camera_position - v_world_position);
 
     for (int i = 0; i < u_numLights; i++) {
