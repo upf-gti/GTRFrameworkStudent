@@ -4,16 +4,6 @@ texture basic.vs texture.fs
 skybox basic.vs skybox.fs
 depth quad.vs depth.fs
 multi basic.vs multi.fs
-compute test.cs
-
-\test.cs
-#version 430 core
-
-layout(local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
-void main() 
-{
-	vec4 i = vec4(0.0);
-}
 
 \basic.vs
 
