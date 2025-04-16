@@ -27,6 +27,11 @@ std::vector<sDrawCommand> draw_command_list;
 std::vector<sDrawCommand> transparentNodes;
 std::vector<sDrawCommand> opaqueNodes;
 std::vector<SCN::LightEntity*> lights;
+
+bool use_multipass = false;
+
+float alpha_cutoff = 0;
+
 using namespace SCN;
 
 //some globals
@@ -263,7 +268,6 @@ void Renderer::renderMeshWithMaterial(const Matrix44 model, GFX::Mesh* mesh, SCN
 	const int MAX_LIGHTS = 100;
 	int numLights = std::min<int>(static_cast<int>(lights.size()), MAX_LIGHTS);
 
-
 	std::vector<Vector3f> lightPositions;
 	std::vector<Vector3f> lightColors;
 	std::vector<float> lightIntensities;
@@ -272,7 +276,13 @@ void Renderer::renderMeshWithMaterial(const Matrix44 model, GFX::Mesh* mesh, SCN
 	std::vector<Vector3f> lightDirections;
 	std::vector<Vector2f> lightConeInfo;
 
+	if (use_multipass) {
+		glDepthFunc(GL_LEQUAL);
+		glBlendFunc(GL_SRC_ALPHA, GL_ONE);
+	}
+
 	for (int i = 0; i < numLights; i++) {
+
 		SCN::LightEntity* light = lights[i];
 
 		// Tipo de luz (0: Punto, 1: Direccional)
@@ -309,26 +319,89 @@ void Renderer::renderMeshWithMaterial(const Matrix44 model, GFX::Mesh* mesh, SCN
 
 		lightColors.push_back(light->color);
 		lightIntensities.push_back(light->intensity);
+
+		if (use_multipass) {
+			if (i == 0) {
+				glDisable(GL_BLEND);
+
+				// Enviar uniformes al shader
+				shader->setUniform("u_numLights", 1);
+				shader->setUniform3Array("u_light_pos", reinterpret_cast<float*>(lightPositions.data()), 1);
+				shader->setUniform3Array("u_light_color", reinterpret_cast<float*>(lightColors.data()), 1);
+				shader->setUniform1Array("u_light_intensity", lightIntensities.data(), 1);
+				shader->setUniform1Array("u_light_type", lightTypes.data(), 1);
+				shader->setUniform("u_ambient_light", scene->ambient_light);
+
+				shader->setUniform3Array("u_light_direction", reinterpret_cast<float*>(lightDirections.data()), 1);
+				shader->setUniform2Array("u_light_cone_info", reinterpret_cast<float*>(lightConeInfo.data()), 1);
+
+				// Render just the verticies as a wireframe
+				if (render_wireframe)
+					glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+
+				//do the draw call that renders the mesh into the screen
+				mesh->render(GL_TRIANGLES);
+
+				lightPositions.clear();
+				lightColors.clear();
+				lightIntensities.clear();
+				lightTypes.clear();
+				lightDirections.clear();
+				lightConeInfo.clear();
+			}
+			else {
+				glEnable(GL_BLEND);
+
+				// Enviar uniformes al shader
+				shader->setUniform("u_numLights", 1);
+				shader->setUniform3Array("u_light_pos", reinterpret_cast<float*>(lightPositions.data()), 1);
+				shader->setUniform3Array("u_light_color", reinterpret_cast<float*>(lightColors.data()), 1);
+				shader->setUniform1Array("u_light_intensity", lightIntensities.data(), 1);
+				shader->setUniform1Array("u_light_type", lightTypes.data(), 1);
+
+				shader->setUniform3Array("u_light_direction", reinterpret_cast<float*>(lightDirections.data()), 1);
+				shader->setUniform2Array("u_light_cone_info", reinterpret_cast<float*>(lightConeInfo.data()), 1);
+
+				// Render just the verticies as a wireframe
+				if (render_wireframe)
+					glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+
+				//do the draw call that renders the mesh into the screen
+				mesh->render(GL_TRIANGLES);
+
+				lightPositions.clear();
+				lightColors.clear();
+				lightIntensities.clear();
+				lightTypes.clear();
+				lightDirections.clear();
+				lightConeInfo.clear();
+			}
+		}
 	}
 
+	if (!use_multipass) {
+		shader->setUniform("u_numLights", numLights);
+		shader->setUniform3Array("u_light_pos", reinterpret_cast<float*>(lightPositions.data()), numLights);
+		shader->setUniform3Array("u_light_color", reinterpret_cast<float*>(lightColors.data()), numLights);
+		shader->setUniform1Array("u_light_intensity", lightIntensities.data(), numLights);
+		shader->setUniform1Array("u_light_type", lightTypes.data(), numLights);
+		shader->setUniform("u_ambient_light", scene->ambient_light);
 
-	// Enviar uniformes al shader
-	shader->setUniform("u_numLights", numLights);
-	shader->setUniform3Array("u_light_pos", reinterpret_cast<float*>(lightPositions.data()), numLights);
-	shader->setUniform3Array("u_light_color", reinterpret_cast<float*>(lightColors.data()), numLights);
-	shader->setUniform1Array("u_light_intensity", lightIntensities.data(), numLights);
-	shader->setUniform1Array("u_light_type", lightTypes.data(), numLights);
-	shader->setUniform("u_ambient_light", scene->ambient_light);
+		shader->setUniform3Array("u_light_direction", reinterpret_cast<float*>(lightDirections.data()), numLights);
+		shader->setUniform2Array("u_light_cone_info", reinterpret_cast<float*>(lightConeInfo.data()), numLights);
 
-	shader->setUniform3Array("u_light_direction", reinterpret_cast<float*>(lightDirections.data()), numLights);
-	shader->setUniform2Array("u_light_cone_info", reinterpret_cast<float*>(lightConeInfo.data()), numLights);
+		// Render just the verticies as a wireframe
+		if (render_wireframe)
+			glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
 
-	// Render just the verticies as a wireframe
-	if (render_wireframe)
-		glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+		//do the draw call that renders the mesh into the screen
+		mesh->render(GL_TRIANGLES);
+	}
 
-	//do the draw call that renders the mesh into the screen
-	mesh->render(GL_TRIANGLES);
+	if (use_multipass) {
+		glDisable(GL_BLEND);
+		glDepthFunc(GL_LESS);
+	}
 
 	//disable shader
 	shader->disable();
@@ -348,6 +421,9 @@ void Renderer::showUI()
 
 	//add here your stuff
 	//...
+	ImGui::Checkbox("Use Multipass Rendering", &use_multipass);
+
+	ImGui::SliderFloat("Alpha Cutoff", &alpha_cutoff, 0.0f, 1.0f);
 }
 
 #else
