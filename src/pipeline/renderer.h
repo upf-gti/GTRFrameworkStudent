@@ -54,6 +54,8 @@ namespace SCN {
 		//to render one mesh given its material and transformation matrix
 		void renderMeshWithMaterial(const Matrix44 model, GFX::Mesh* mesh, SCN::Material* material);
 
+		void showShininessSliders(SCN::Node* node);
+
 		void showUI();
 	};
 

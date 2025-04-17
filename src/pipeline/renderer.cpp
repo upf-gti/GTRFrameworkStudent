@@ -260,6 +260,8 @@ void Renderer::renderMeshWithMaterial(const Matrix44 model, GFX::Mesh* mesh, SCN
 	// Upload camera uniforms
 	shader->setUniform("u_viewprojection", camera->viewprojection_matrix);
 	shader->setUniform("u_camera_position", camera->eye);
+	shader->setUniform("u_alpha_cutoff", alpha_cutoff);
+
 
 	// Upload time, for cool shader effects
 	float t = getTime();
@@ -326,6 +328,7 @@ void Renderer::renderMeshWithMaterial(const Matrix44 model, GFX::Mesh* mesh, SCN
 
 				// Enviar uniformes al shader
 				shader->setUniform("u_numLights", 1);
+				shader->setUniform("u_apply_ambient", true);
 				shader->setUniform3Array("u_light_pos", reinterpret_cast<float*>(lightPositions.data()), 1);
 				shader->setUniform3Array("u_light_color", reinterpret_cast<float*>(lightColors.data()), 1);
 				shader->setUniform1Array("u_light_intensity", lightIntensities.data(), 1);
@@ -354,6 +357,7 @@ void Renderer::renderMeshWithMaterial(const Matrix44 model, GFX::Mesh* mesh, SCN
 
 				// Enviar uniformes al shader
 				shader->setUniform("u_numLights", 1);
+				shader->setUniform("u_apply_ambient", false);
 				shader->setUniform3Array("u_light_pos", reinterpret_cast<float*>(lightPositions.data()), 1);
 				shader->setUniform3Array("u_light_color", reinterpret_cast<float*>(lightColors.data()), 1);
 				shader->setUniform1Array("u_light_intensity", lightIntensities.data(), 1);
@@ -386,7 +390,7 @@ void Renderer::renderMeshWithMaterial(const Matrix44 model, GFX::Mesh* mesh, SCN
 		shader->setUniform1Array("u_light_intensity", lightIntensities.data(), numLights);
 		shader->setUniform1Array("u_light_type", lightTypes.data(), numLights);
 		shader->setUniform("u_ambient_light", scene->ambient_light);
-
+		shader->setUniform("u_apply_ambient", true);
 		shader->setUniform3Array("u_light_direction", reinterpret_cast<float*>(lightDirections.data()), numLights);
 		shader->setUniform2Array("u_light_cone_info", reinterpret_cast<float*>(lightConeInfo.data()), numLights);
 
@@ -424,7 +428,30 @@ void Renderer::showUI()
 	ImGui::Checkbox("Use Multipass Rendering", &use_multipass);
 
 	ImGui::SliderFloat("Alpha Cutoff", &alpha_cutoff, 0.0f, 1.0f);
+
+	if (SCN::BaseEntity::s_selected && SCN::BaseEntity::s_selected->getType() == SCN::eEntityType::PREFAB)
+	{
+		SCN::PrefabEntity* prefab = (SCN::PrefabEntity*)SCN::BaseEntity::s_selected;
+		showShininessSliders(&prefab->root);
+	}
+
+
 }
+//recursive function to show the shininess sliders
+void Renderer::showShininessSliders(SCN::Node* node) 
+{
+	if (node->material)
+	{
+		std::string label = "Shininess##" + node->name;
+		ImGui::SliderFloat(label.c_str(), &node->material->shininess, 0.0f, 100.0f);
+	}
+
+	for (SCN::Node* child : node->children)
+	{
+		showShininessSliders(child);
+	}
+}
+
 
 #else
 void Renderer::showUI() {}

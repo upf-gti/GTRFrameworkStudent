@@ -273,6 +273,8 @@ uniform vec3 u_light_pos[MAX_LIGHTS];
 uniform vec3 u_light_color[MAX_LIGHTS];	
 uniform float u_light_intensity[MAX_LIGHTS];
 uniform int u_light_type[MAX_LIGHTS]; // 0: punto, 1: direccional
+uniform bool u_apply_ambient;
+
 
 // Luz ambiental global
 uniform vec3 u_ambient_light;
@@ -295,7 +297,10 @@ void main() {
     vec3 base_color = color.rgb;
 
     // === Componentes Phong ===
-    vec3 ambient = u_ambient_light * base_color;
+    vec3 ambient = vec3(0.0);
+	if (u_apply_ambient) {
+		ambient = u_ambient_light * base_color;
+	}
     vec3 diffuse_total = vec3(0.0);
     vec3 specular_total = vec3(0.0);
 
