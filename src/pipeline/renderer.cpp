@@ -37,6 +37,10 @@ using namespace SCN;
 //some globals
 GFX::Mesh sphere;
 
+GFX::FBO shadow_FBO;//Assignment 3
+
+Camera lightCam; // Assignment 3
+
 Renderer::Renderer(const char* shader_atlas_filename)
 {
 	render_wireframe = false;
@@ -50,6 +54,11 @@ Renderer::Renderer(const char* shader_atlas_filename)
 
 	sphere.createSphere(1.0f);
 	sphere.uploadToVRAM();
+
+	// Shadow map FBO setup (only depth, 1024x1024)
+	shadow_FBO.setDepthOnly(1024, 1024);
+
+
 }
 
 void Renderer::setupScene()
@@ -162,6 +171,8 @@ void Renderer::renderScene(SCN::Scene* scene, Camera* camera)
 
 	parseSceneEntities(scene, camera);
 
+	renderToShadowMap();// Assignment 3  3.2.2
+
 	//set the clear color (the background color)
 	glClearColor(scene->background_color.x, scene->background_color.y, scene->background_color.z, 1.0);
 
@@ -261,6 +272,7 @@ void Renderer::renderMeshWithMaterial(const Matrix44 model, GFX::Mesh* mesh, SCN
 	shader->setUniform("u_viewprojection", camera->viewprojection_matrix);
 	shader->setUniform("u_camera_position", camera->eye);
 	shader->setUniform("u_alpha_cutoff", alpha_cutoff);
+	shader->setUniform("u_shadow_vp", lightCam.viewprojection_matrix);
 
 
 	// Upload time, for cool shader effects
@@ -398,6 +410,9 @@ void Renderer::renderMeshWithMaterial(const Matrix44 model, GFX::Mesh* mesh, SCN
 		if (render_wireframe)
 			glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
 
+		shader->setUniform("u_shadowmap", shadow_FBO.depth_texture, 2);
+
+
 		//do the draw call that renders the mesh into the screen
 		mesh->render(GL_TRIANGLES);
 	}
@@ -452,6 +467,106 @@ void Renderer::showShininessSliders(SCN::Node* node)
 	}
 }
 
+// Assignment 3.2.1
+Camera Renderer::configureLightCamera() {
+	// Assume light 0 is our spotlight
+	LightEntity* light_ent = lights[3];
+	Camera light_cam;
+
+	Matrix44 light_model = light_ent->root.getGlobalMatrix();
+	Vector3f light_pos = light_model.getTranslation();
+
+	light_cam.lookAt(light_pos, light_model * Vector3f(0.0f, 0.0f, -1.0f), Vector3f(0.0f, 1.0f, 0.0f));
+
+	if (light_ent->light_type == eLightType::SPOT)
+	{
+		float fov = light_ent->cone_info.y * 2.0f; 
+		float aspect = 1.0f;
+		light_cam.setPerspective(fov, aspect, light_ent->near_distance, light_ent->max_distance);
+	}
+	else if (light_ent->light_type == eLightType::DIRECTIONAL)
+	{
+		float half_size = light_ent->area / 2.0f;
+		light_cam.setOrthographic(
+			-half_size, half_size,
+			-half_size, half_size,
+			light_ent->near_distance,
+			light_ent->max_distance
+		);
+	}
+
+	return light_cam;
+}
+
+void Renderer::renderToShadowMap() {
+	if (lights.empty())
+		return;
+
+	GLint old_viewport[4];
+	glGetIntegerv(GL_VIEWPORT, old_viewport);
+	GLint old_draw_buf;
+	glGetIntegerv(GL_DRAW_BUFFER, &old_draw_buf);
+
+
+	shadow_FBO.bind();
+	glDrawBuffer(GL_NONE);
+	//glReadBuffer(GL_NONE);
+	glColorMask(GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE);
+
+	const int SHADOW_RES = 1024;  
+	glViewport(0, 0, SHADOW_RES, SHADOW_RES);
+
+	glEnable(GL_DEPTH_TEST);
+	glDepthFunc(GL_LESS);
+	glDepthMask(GL_TRUE);
+	glClear(GL_DEPTH_BUFFER_BIT);
+
+	lightCam = configureLightCamera();
+
+	for (auto& cmd : opaqueNodes) {
+		renderPlain(lightCam, cmd.model, cmd.mesh, cmd.material);
+	}
+
+	glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+
+
+	shadow_FBO.unbind();
+
+	glViewport(old_viewport[0], old_viewport[1],
+		old_viewport[2], old_viewport[3]);
+	glDrawBuffer(old_draw_buf);
+	//glReadBuffer(old_read_buf);
+
+
+}
+
+
+void Renderer::renderPlain(const Camera& C,
+	const Matrix44& model,
+	GFX::Mesh* mesh,
+	SCN::Material* mat)
+{
+	if (!mesh || mesh->getNumVertices() == 0) return;
+
+	GFX::Shader* s = GFX::Shader::Get("plain");
+	s->enable();
+	s->setUniform("u_model", model);
+	s->setUniform("u_viewprojection", C.viewprojection_matrix);
+
+	int useMask = (mat && mat->alpha_mode == SCN::MASK &&
+		mat->textures[SCN::OPACITY].texture) ? 1 : 0;
+	s->setUniform("u_use_mask", useMask);
+	s->setUniform("u_alpha_cutoff",
+		mat ? mat->alpha_cutoff : 0.5f);
+	if (useMask) {
+		s->setUniform("u_opacity_map",
+			mat->textures[SCN::OPACITY].texture, 0);
+	}
+
+	mesh->render(GL_TRIANGLES);
+	s->disable();
+
+}
 
 #else
 void Renderer::showUI() {}

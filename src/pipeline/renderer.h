@@ -30,6 +30,7 @@ namespace SCN {
 
 		SCN::Scene* scene;
 
+
 		//updated every frame
 		Renderer(const char* shaders_atlas_filename );
 
@@ -54,7 +55,16 @@ namespace SCN {
 		//to render one mesh given its material and transformation matrix
 		void renderMeshWithMaterial(const Matrix44 model, GFX::Mesh* mesh, SCN::Material* material);
 
-		void showShininessSliders(SCN::Node* node);
+		void showShininessSliders(SCN::Node* node);//Assignment 2
+
+		Camera configureLightCamera(); //Assignment 3
+
+		void renderToShadowMap();  //Assignment 3
+
+		void renderPlain(const Camera& lightCam,
+			const Matrix44& model,
+			GFX::Mesh* mesh,
+			SCN::Material* material); //Assignment 3
 
 		void showUI();
 	};

@@ -1,4 +1,5 @@
 //example of some shaders compiled
+plain basic.vs plain.fs
 flat basic.vs flat.fs
 texture basic.vs texture.fs
 skybox basic.vs skybox.fs
@@ -284,6 +285,11 @@ uniform float u_shininess; // Brillo del material
 uniform vec3 u_light_direction[MAX_LIGHTS]; // D: Dirección del spotlight (cono)
 uniform vec2 u_light_cone_info[MAX_LIGHTS]; // x: alpha_min, y: alpha_max (¡en radianes!)
 
+//shadows
+uniform sampler2D u_shadowmap;
+uniform mat4 u_shadow_vp;
+
+
 out vec4 FragColor;
 
 void main() {
@@ -307,7 +313,20 @@ void main() {
     vec3 normal_pixel = texture(u_texture_normal, v_uv).rgb;
     vec3 N = perturbNormal(normalize(v_normal), v_world_position, v_uv, normal_pixel);
     vec3 V = normalize(u_camera_position - v_world_position);
+	vec4 proj_pos = u_shadow_vp * vec4(v_world_position, 1.0); //Assignment 3.3
+	proj_pos /= proj_pos.w;
 
+	vec2 shadow_uv = proj_pos.xy * 0.5 + 0.5;
+	float shadow_depth = texture(u_shadowmap, shadow_uv).r;
+	float current_depth = proj_pos.z * 0.5 + 0.5;
+
+	float shadow_factor = 1.0;
+	if (shadow_uv.x >= 0.0 && shadow_uv.x <= 1.0 &&
+		shadow_uv.y >= 0.0 && shadow_uv.y <= 1.0)
+	{
+		if (current_depth > shadow_depth)
+			shadow_factor = 0.0;
+	}
     for (int i = 0; i < u_numLights; i++) {
         vec3 L;
         float attenuation = 1.0;
@@ -354,6 +373,14 @@ void main() {
         specular_total += u_light_color[i] * u_light_intensity[i] * attenuation * pow(R_dot_V, u_shininess);
     }
 
-    vec3 final_color = ambient + diffuse_total + specular_total;
+	vec3 final_color = ambient + (diffuse_total + specular_total) * shadow_factor;
     FragColor = vec4(final_color, color.a);
+}
+
+\plain.fs
+#version 330 core
+out vec4 FragColor;
+void main()
+{
+    FragColor = vec4(0.0,0.0,0.0,1.0);
 }
