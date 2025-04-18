@@ -261,7 +261,9 @@ void Renderer::renderMeshWithMaterial(const Matrix44 model, GFX::Mesh* mesh, SCN
 	if (!shader)
 		return;
 	shader->enable();
-
+	shader->setUniform("u_shadowmap", shadow_FBO.depth_texture, 2);
+	shader->setUniform("u_shadow_vp", lightCam.viewprojection_matrix);
+	shader->setUniform("u_shadow_bias", 0.005f);
 
 	material->bind(shader);
 
@@ -272,7 +274,8 @@ void Renderer::renderMeshWithMaterial(const Matrix44 model, GFX::Mesh* mesh, SCN
 	shader->setUniform("u_viewprojection", camera->viewprojection_matrix);
 	shader->setUniform("u_camera_position", camera->eye);
 	shader->setUniform("u_alpha_cutoff", alpha_cutoff);
-	shader->setUniform("u_shadow_vp", lightCam.viewprojection_matrix);
+
+
 
 
 	// Upload time, for cool shader effects
@@ -313,7 +316,7 @@ void Renderer::renderMeshWithMaterial(const Matrix44 model, GFX::Mesh* mesh, SCN
 
 		if (type == 1) { // Direccional
 			Vector3f front = light->root.getGlobalMatrix().frontVector().normalize();
-			lightPositions.push_back(front);
+			lightDirections.push_back(front);
 		}
 		else if (type == 2) {
 			Vector3f pos = light->root.getGlobalMatrix().getTranslation();
@@ -396,6 +399,13 @@ void Renderer::renderMeshWithMaterial(const Matrix44 model, GFX::Mesh* mesh, SCN
 	}
 
 	if (!use_multipass) {
+		// Asegurar que todas las luces tengan dirección (aunque no se use)
+		while (lightDirections.size() < numLights)
+			lightDirections.push_back(Vector3f(0.0f, 0.0f, -1.0f)); // valor seguro
+
+		while (lightConeInfo.size() < numLights)
+			lightConeInfo.push_back(Vector2f(0.0f, 0.0f)); // no se usará si no es spotlight
+
 		shader->setUniform("u_numLights", numLights);
 		shader->setUniform3Array("u_light_pos", reinterpret_cast<float*>(lightPositions.data()), numLights);
 		shader->setUniform3Array("u_light_color", reinterpret_cast<float*>(lightColors.data()), numLights);
@@ -410,7 +420,6 @@ void Renderer::renderMeshWithMaterial(const Matrix44 model, GFX::Mesh* mesh, SCN
 		if (render_wireframe)
 			glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
 
-		shader->setUniform("u_shadowmap", shadow_FBO.depth_texture, 2);
 
 
 		//do the draw call that renders the mesh into the screen
@@ -521,11 +530,17 @@ void Renderer::renderToShadowMap() {
 	glDepthMask(GL_TRUE);
 	glClear(GL_DEPTH_BUFFER_BIT);
 
+	glEnable(GL_CULL_FACE);//3.4.2
+	glFrontFace(GL_CW);//3.4.2
+
 	lightCam = configureLightCamera();
 
 	for (auto& cmd : opaqueNodes) {
 		renderPlain(lightCam, cmd.model, cmd.mesh, cmd.material);
 	}
+
+	glFrontFace(GL_CCW);//3.4.2
+	glDisable(GL_CULL_FACE);//3.4.2
 
 	glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
 

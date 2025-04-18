@@ -288,6 +288,7 @@ uniform vec2 u_light_cone_info[MAX_LIGHTS]; // x: alpha_min, y: alpha_max (¡en 
 //shadows
 uniform sampler2D u_shadowmap;
 uniform mat4 u_shadow_vp;
+uniform float u_shadow_bias;
 
 
 out vec4 FragColor;
@@ -314,12 +315,13 @@ void main() {
     vec3 N = perturbNormal(normalize(v_normal), v_world_position, v_uv, normal_pixel);
     vec3 V = normalize(u_camera_position - v_world_position);
 	vec4 proj_pos = u_shadow_vp * vec4(v_world_position, 1.0); //Assignment 3.3
+	float real_depth = (proj_pos.z - u_shadow_bias) / proj_pos.w;
 	proj_pos /= proj_pos.w;
 
 	vec2 shadow_uv = proj_pos.xy * 0.5 + 0.5;
 	float shadow_depth = texture(u_shadowmap, shadow_uv).r;
-	float current_depth = proj_pos.z * 0.5 + 0.5;
-
+	float current_depth = real_depth * 0.5 + 0.5;
+	
 	float shadow_factor = 1.0;
 	if (shadow_uv.x >= 0.0 && shadow_uv.x <= 1.0 &&
 		shadow_uv.y >= 0.0 && shadow_uv.y <= 1.0)
@@ -337,7 +339,7 @@ void main() {
             attenuation = 1.0 / (distance * distance);
         }
         else if (u_light_type[i] == 1) { // Luz direccional
-            L = normalize(-u_light_pos[i]); // Dirección inversa
+            L = normalize(u_light_direction[i]);
             attenuation = 1.0;
         }
 		else if (u_light_type[i] == 2) { // Spotlight
@@ -362,18 +364,27 @@ void main() {
 			attenuation = (1.0 / (distance * distance)) * spot_factor;
 		}
 
+		// === Aquí empieza el orden correcto ===
+		float N_dot_L = clamp(dot(N, L), 0.0, 1.0);
+		vec3 R = reflect(L, N);
+		float R_dot_V = clamp(dot(R, V), 0.0, 1.0);
 
-        // Difusa
-        float N_dot_L = clamp(dot(N, L), 0.0, 1.0);
-        diffuse_total += base_color * N_dot_L * u_light_color[i] * u_light_intensity[i] * attenuation;
+		vec3 light_diffuse = base_color * N_dot_L * u_light_color[i] * u_light_intensity[i] * attenuation;
+		vec3 light_specular = u_light_color[i] * u_light_intensity[i] * attenuation * pow(R_dot_V, u_shininess);
 
-        // Especular
-        vec3 R = reflect(L, N);
-        float R_dot_V = clamp(dot(R, V), 0.0, 1.0);
-        specular_total += u_light_color[i] * u_light_intensity[i] * attenuation * pow(R_dot_V, u_shininess);
+		if (u_light_type[i] == 1 && i == 3)		
+		{
+			light_diffuse *= shadow_factor;
+			light_specular *= shadow_factor;
+		}
+
+		diffuse_total += light_diffuse;
+		specular_total += light_specular;
+
+				
     }
 
-	vec3 final_color = ambient + (diffuse_total + specular_total) * shadow_factor;
+	vec3 final_color = ambient + (diffuse_total + specular_total);
     FragColor = vec4(final_color, color.a);
 }
 
