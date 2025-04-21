@@ -57,7 +57,7 @@ namespace SCN {
 
 		void showShininessSliders(SCN::Node* node);//Assignment 2
 
-		Camera configureLightCamera(); //Assignment 3
+		Camera configureLightCamera(int index); //Assignment 3
 
 		void renderToShadowMap();  //Assignment 3
 

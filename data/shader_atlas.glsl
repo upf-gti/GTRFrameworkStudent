@@ -231,6 +231,7 @@ void main()
 #version 330 core
 
 #define MAX_LIGHTS 100
+#define MAX_SHADOW_CASTERS 4
 
 
 mat3 cotangentFrame(vec3 N, vec3 p, vec2 uv) {
@@ -286,9 +287,10 @@ uniform vec3 u_light_direction[MAX_LIGHTS]; // D: Dirección del spotlight (cono
 uniform vec2 u_light_cone_info[MAX_LIGHTS]; // x: alpha_min, y: alpha_max (¡en radianes!)
 
 //shadows
-uniform sampler2D u_shadowmap;
-uniform mat4 u_shadow_vp;
+uniform sampler2D u_shadow_maps[MAX_SHADOW_CASTERS];
+uniform mat4 u_shadow_vps[MAX_SHADOW_CASTERS];
 uniform float u_shadow_bias;
+uniform int    u_numShadowCasters;
 
 
 out vec4 FragColor;
@@ -314,22 +316,27 @@ void main() {
     vec3 normal_pixel = texture(u_texture_normal, v_uv).rgb;
     vec3 N = perturbNormal(normalize(v_normal), v_world_position, v_uv, normal_pixel);
     vec3 V = normalize(u_camera_position - v_world_position);
-	vec4 proj_pos = u_shadow_vp * vec4(v_world_position, 1.0); //Assignment 3.3
-	float real_depth = (proj_pos.z - u_shadow_bias) / proj_pos.w;
-	proj_pos /= proj_pos.w;
 
-	vec2 shadow_uv = proj_pos.xy * 0.5 + 0.5;
-	float shadow_depth = texture(u_shadowmap, shadow_uv).r;
-	float current_depth = real_depth * 0.5 + 0.5;
-	
-	float shadow_factor = 1.0;
-	if (shadow_uv.x >= 0.0 && shadow_uv.x <= 1.0 &&
-		shadow_uv.y >= 0.0 && shadow_uv.y <= 1.0)
-	{
-		if (current_depth > shadow_depth)
-			shadow_factor = 0.0;
-	}
     for (int i = 0; i < u_numLights; i++) {
+
+        float shadow_factor = 1.0;
+		if (i < u_numShadowCasters) {
+            vec4 proj_pos     = u_shadow_vps[i] * vec4(v_world_position, 1.0);
+            float real_depth  = (proj_pos.z - u_shadow_bias) / proj_pos.w;
+            proj_pos /= proj_pos.w;
+            vec2 shadow_uv    = proj_pos.xy * 0.5 + 0.5;
+            float shadow_depth = texture(u_shadow_maps[i], shadow_uv).x;
+            float current_depth = real_depth * 0.5 + 0.5;
+            if (shadow_uv.x >= 0.0 && shadow_uv.x <= 1.0 &&
+                shadow_uv.y >= 0.0 && shadow_uv.y <= 1.0)
+            {
+                if (current_depth > shadow_depth)
+                    shadow_factor = 0.0;
+            }
+        }
+
+
+
         vec3 L;
         float attenuation = 1.0;
 
@@ -372,14 +379,15 @@ void main() {
 		vec3 light_diffuse = base_color * N_dot_L * u_light_color[i] * u_light_intensity[i] * attenuation;
 		vec3 light_specular = u_light_color[i] * u_light_intensity[i] * attenuation * pow(R_dot_V, u_shininess);
 
-		if (u_light_type[i] == 1 && i == 3)		
-		{
-			light_diffuse *= shadow_factor;
-			light_specular *= shadow_factor;
-		}
+	// todas las luces con shadow_factor<1 lo tomarán en cuenta
+	if (i < u_numShadowCasters &&(u_light_type[i]==1 || u_light_type[i]==2) ){
+		light_diffuse  *= shadow_factor;
+		light_specular *= shadow_factor;
+   }
 
-		diffuse_total += light_diffuse;
-		specular_total += light_specular;
+
+	diffuse_total += light_diffuse;
+	specular_total += light_specular;
 
 				
     }

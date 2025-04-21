@@ -35,9 +35,13 @@ float alpha_cutoff = 0;
 using namespace SCN;
 
 //some globals
+
+static const int MAX_SHADOW_CASTERS = 4;
+
 GFX::Mesh sphere;
 
-GFX::FBO shadow_FBO;//Assignment 3
+std::vector<GFX::FBO>   shadow_FBOs;
+std::vector<Matrix44>   shadow_vps;
 
 Camera lightCam; // Assignment 3
 
@@ -56,8 +60,9 @@ Renderer::Renderer(const char* shader_atlas_filename)
 	sphere.uploadToVRAM();
 
 	// Shadow map FBO setup (only depth, 1024x1024)
-	shadow_FBO.setDepthOnly(1024, 1024);
-
+	shadow_FBOs.resize(MAX_SHADOW_CASTERS);
+	for (auto& fbo : shadow_FBOs)
+		fbo.setDepthOnly(1024, 1024);
 
 }
 
@@ -137,7 +142,7 @@ void Renderer::parseSceneEntities(SCN::Scene* scene, Camera* cam) {
 	draw_command_list.clear();
 	opaqueNodes.clear();
 	transparentNodes.clear();
-	lights.clear(); 
+	lights.clear();
 	for (int i = 0; i < scene->entities.size(); i++) {
 		BaseEntity* entity = scene->entities[i];
 
@@ -237,7 +242,7 @@ void Renderer::renderSkybox(GFX::Texture* cubemap)
 	glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
 	glEnable(GL_DEPTH_TEST);
 }
-
+// Renders a mesh given its transform and material
 // Renders a mesh given its transform and material
 void Renderer::renderMeshWithMaterial(const Matrix44 model, GFX::Mesh* mesh, SCN::Material* material)
 {
@@ -261,8 +266,29 @@ void Renderer::renderMeshWithMaterial(const Matrix44 model, GFX::Mesh* mesh, SCN
 	if (!shader)
 		return;
 	shader->enable();
-	shader->setUniform("u_shadowmap", shadow_FBO.depth_texture, 2);
-	shader->setUniform("u_shadow_vp", lightCam.viewprojection_matrix);
+	static const char* shadowNames[MAX_SHADOW_CASTERS] = {
+			"u_shadow_maps[0]",
+			"u_shadow_maps[1]",
+			"u_shadow_maps[2]",
+			"u_shadow_maps[3]"
+	};
+
+
+	int nSh = std::min<int>(lights.size(), MAX_SHADOW_CASTERS);
+	for (int i = 0; i < nSh; ++i) {
+		// bindea la textura de profundidad en la unidad 2+i
+		shader->setUniform(
+			shadowNames[i],
+			shadow_FBOs[i].depth_texture,
+			 2 + i
+		);
+	}
+
+	// 2) subimos el array de matrices:
+	shader->setMatrix44Array("u_shadow_vps", shadow_vps.data(), nSh);
+	// 3) número efectivo de casters
+	shader->setUniform("u_numShadowCasters", nSh);
+	// 4) bias
 	shader->setUniform("u_shadow_bias", 0.01f);
 
 	material->bind(shader);
@@ -275,12 +301,9 @@ void Renderer::renderMeshWithMaterial(const Matrix44 model, GFX::Mesh* mesh, SCN
 	shader->setUniform("u_camera_position", camera->eye);
 	shader->setUniform("u_alpha_cutoff", alpha_cutoff);
 
-
-
-
 	// Upload time, for cool shader effects
 	float t = getTime();
-	shader->setUniform("u_time", t);	
+	shader->setUniform("u_time", t);
 
 	const int MAX_LIGHTS = 100;
 	int numLights = std::min<int>(static_cast<int>(lights.size()), MAX_LIGHTS);
@@ -292,11 +315,6 @@ void Renderer::renderMeshWithMaterial(const Matrix44 model, GFX::Mesh* mesh, SCN
 
 	std::vector<Vector3f> lightDirections;
 	std::vector<Vector2f> lightConeInfo;
-
-	if (use_multipass) {
-		glDepthFunc(GL_LEQUAL);
-		glBlendFunc(GL_SRC_ALPHA, GL_ONE);
-	}
 
 	for (int i = 0; i < numLights; i++) {
 
@@ -317,8 +335,10 @@ void Renderer::renderMeshWithMaterial(const Matrix44 model, GFX::Mesh* mesh, SCN
 		if (type == 1) { // Direccional
 			Vector3f front = light->root.getGlobalMatrix().frontVector().normalize();
 			lightDirections.push_back(front);
+			lightPositions.push_back(0);
+			lightConeInfo.push_back(Vector2f(0, 0));
 		}
-		else if (type == 2) {
+		else if (type == 2) { // Spot
 			Vector3f pos = light->root.getGlobalMatrix().getTranslation();
 			Vector3f dir = light->root.getGlobalMatrix().frontVector().normalize();
 
@@ -332,64 +352,15 @@ void Renderer::renderMeshWithMaterial(const Matrix44 model, GFX::Mesh* mesh, SCN
 		else { // Puntual
 			Vector3f pos = light->root.getGlobalMatrix().getTranslation();
 			lightPositions.push_back(pos);
+			lightDirections.push_back(0);
+			lightConeInfo.push_back(Vector2f(0, 0));
 		}
 
 		lightColors.push_back(light->color);
 		lightIntensities.push_back(light->intensity);
-
-		if (use_multipass) {
-			
-			while (lightDirections.size() < 1)
-				lightDirections.push_back(Vector3f(0.0f, 0.0f, -1.0f)); // valor seguro
-
-			while (lightConeInfo.size() < numLights)
-				lightConeInfo.push_back(Vector2f(0.0f, 0.0f));
-
-			if (i == 0) {
-				glDisable(GL_BLEND);
-
-				shader->setUniform("u_apply_ambient", 1);
-
-			}
-			else {
-				glEnable(GL_BLEND);
-
-				shader->setUniform("u_apply_ambient", 0);
-			}
-
-			shader->setUniform("u_numLights", 1);
-			shader->setUniform3Array("u_light_pos", reinterpret_cast<float*>(lightPositions.data()), 1);
-			shader->setUniform3Array("u_light_color", reinterpret_cast<float*>(lightColors.data()), 1);
-			shader->setUniform1Array("u_light_intensity", lightIntensities.data(), 1);
-			shader->setUniform1Array("u_light_type", lightTypes.data(), 1);
-			shader->setUniform("u_ambient_light", scene->ambient_light);
-
-			shader->setUniform3Array("u_light_direction", reinterpret_cast<float*>(lightDirections.data()), 1);
-			shader->setUniform2Array("u_light_cone_info", reinterpret_cast<float*>(lightConeInfo.data()), 1);
-
-			// Render just the verticies as a wireframe
-			if (render_wireframe)
-				glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
-
-			//do the draw call that renders the mesh into the screen
-			mesh->render(GL_TRIANGLES);
-
-			lightPositions.clear();
-			lightColors.clear();
-			lightIntensities.clear();
-			lightTypes.clear();
-			lightDirections.clear();
-			lightConeInfo.clear();
-		}
 	}
 
 	if (!use_multipass) {
-		// Asegurar que todas las luces tengan dirección (aunque no se use)
-		while (lightDirections.size() < numLights)
-			lightDirections.push_back(Vector3f(0.0f, 0.0f, -1.0f)); // valor seguro
-
-		while (lightConeInfo.size() < numLights)
-			lightConeInfo.push_back(Vector2f(0.0f, 0.0f)); // no se usará si no es spotlight
 
 		shader->setUniform("u_numLights", numLights);
 		shader->setUniform3Array("u_light_pos", reinterpret_cast<float*>(lightPositions.data()), numLights);
@@ -408,8 +379,40 @@ void Renderer::renderMeshWithMaterial(const Matrix44 model, GFX::Mesh* mesh, SCN
 		//do the draw call that renders the mesh into the screen
 		mesh->render(GL_TRIANGLES);
 	}
+	else {
+		glDepthFunc(GL_LEQUAL);
+		glBlendFunc(GL_SRC_ALPHA, GL_ONE);
 
-	if (use_multipass) {
+		for (int i = 0; i < numLights; i++) {
+			if (i == 0) {
+				glDisable(GL_BLEND);
+
+				shader->setUniform("u_apply_ambient", 1);
+			}
+			else {
+				glEnable(GL_BLEND);
+
+				shader->setUniform("u_apply_ambient", 0);
+			}
+
+			shader->setUniform("u_numLights", 1);
+			shader->setUniform3Array("u_light_pos", reinterpret_cast<const float*>(&lightPositions[i]), 1);
+			shader->setUniform3Array("u_light_color", reinterpret_cast<const float*>(&lightColors[i]), 1);
+			shader->setUniform1Array("u_light_intensity", &lightIntensities[i], 1);
+			shader->setUniform1Array("u_light_type", &lightTypes[i], 1);
+			shader->setUniform("u_ambient_light", scene->ambient_light);
+
+			shader->setUniform3Array("u_light_direction", reinterpret_cast<const float*>(&lightDirections[i]), 1);
+			shader->setUniform2Array("u_light_cone_info", reinterpret_cast<const float*>(&lightConeInfo[i]), 1);
+
+			// Render just the verticies as a wireframe
+			if (render_wireframe)
+				glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+
+			//do the draw call that renders the mesh into the screen
+			mesh->render(GL_TRIANGLES);
+		}
+
 		glDisable(GL_BLEND);
 		glDepthFunc(GL_LESS);
 	}
@@ -446,7 +449,7 @@ void Renderer::showUI()
 }
 
 //recursive function to show the shininess sliders
-void Renderer::showShininessSliders(SCN::Node* node) 
+void Renderer::showShininessSliders(SCN::Node* node)
 {
 	if (node->material)
 	{
@@ -461,9 +464,9 @@ void Renderer::showShininessSliders(SCN::Node* node)
 }
 
 // Assignment 3.2.1
-Camera Renderer::configureLightCamera() {
+Camera Renderer::configureLightCamera(int idx) {
 	// Assume light 0 is our spotlight
-	LightEntity* light_ent = lights[3];
+	LightEntity* light_ent = lights[idx];
 	Camera light_cam;
 
 	Matrix44 light_model = light_ent->root.getGlobalMatrix();
@@ -473,7 +476,7 @@ Camera Renderer::configureLightCamera() {
 
 	if (light_ent->light_type == eLightType::SPOT)
 	{
-		float fov = light_ent->cone_info.y * 2.0f; 
+		float fov = light_ent->cone_info.y * 2.0f;
 		float aspect = 1.0f;
 		light_cam.setPerspective(fov, aspect, light_ent->near_distance, light_ent->max_distance);
 	}
@@ -490,53 +493,61 @@ Camera Renderer::configureLightCamera() {
 
 	return light_cam;
 }
-
 void Renderer::renderToShadowMap() {
 	if (lights.empty())
 		return;
 
+	// Guardamos estado original
 	GLint old_viewport[4];
 	glGetIntegerv(GL_VIEWPORT, old_viewport);
 	GLint old_draw_buf;
 	glGetIntegerv(GL_DRAW_BUFFER, &old_draw_buf);
 
+	const int SHADOW_RES = 1024;
+	// Número de casters que vamos a procesar
+	int n = std::min<int>(lights.size(), MAX_SHADOW_CASTERS);
+	shadow_vps.resize(n);
 
-	shadow_FBO.bind();
-	glDrawBuffer(GL_NONE);
-	//glReadBuffer(GL_NONE);
-	glColorMask(GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE);
+	// Bucle minimalista: sustituye el único shadow_FBO por shadow_FBOs[i]
+	for (int i = 0; i < n; ++i) {
+		shadow_FBOs[i].bind();
+		glDrawBuffer(GL_NONE);
+		// glReadBuffer(GL_NONE);
+		glColorMask(GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE);
 
-	const int SHADOW_RES = 1024;  
-	glViewport(0, 0, SHADOW_RES, SHADOW_RES);
+		glViewport(0, 0, SHADOW_RES, SHADOW_RES);
 
-	glEnable(GL_DEPTH_TEST);
-	glDepthFunc(GL_LESS);
-	glDepthMask(GL_TRUE);
-	glClear(GL_DEPTH_BUFFER_BIT);
+		glEnable(GL_DEPTH_TEST);
+		glDepthFunc(GL_LESS);
+		glDepthMask(GL_TRUE);
+		glClear(GL_DEPTH_BUFFER_BIT);
 
-	glEnable(GL_CULL_FACE);//3.4.2
-	glFrontFace(GL_CW);//3.4.2
+		glEnable(GL_CULL_FACE);
+		glFrontFace(GL_CW);
 
-	lightCam = configureLightCamera();
+		// Configuramos la cámara de esta luz y guardamos su VP
+		lightCam = configureLightCamera(i);
+		shadow_vps[i] = lightCam.viewprojection_matrix;
 
-	for (sDrawCommand& cmd : opaqueNodes) {
-		renderPlain(lightCam, cmd.model, cmd.mesh, cmd.material);
+		// Render en depth-only
+		for (sDrawCommand& cmd : opaqueNodes)
+			renderPlain(lightCam, cmd.model, cmd.mesh, cmd.material);
+
+		glFrontFace(GL_CCW);
+		glDisable(GL_CULL_FACE);
+
+		glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+
+		shadow_FBOs[i].unbind();
 	}
 
-	glFrontFace(GL_CCW);//3.4.2
-	glDisable(GL_CULL_FACE);//3.4.2
-
-	glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
-
-
-	shadow_FBO.unbind();
-
+	// Restauramos viewport y draw buffer originales
 	glViewport(old_viewport[0], old_viewport[1],
 		old_viewport[2], old_viewport[3]);
 	glDrawBuffer(old_draw_buf);
-	//glReadBuffer(old_read_buf);
-
 }
+
+
 
 
 void Renderer::renderPlain(const Camera& C,
