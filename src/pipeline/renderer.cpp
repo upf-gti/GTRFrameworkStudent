@@ -263,7 +263,7 @@ void Renderer::renderMeshWithMaterial(const Matrix44 model, GFX::Mesh* mesh, SCN
 	shader->enable();
 	shader->setUniform("u_shadowmap", shadow_FBO.depth_texture, 2);
 	shader->setUniform("u_shadow_vp", lightCam.viewprojection_matrix);
-	shader->setUniform("u_shadow_bias", 0.005f);
+	shader->setUniform("u_shadow_bias", 0.01f);
 
 	material->bind(shader);
 
@@ -338,63 +338,48 @@ void Renderer::renderMeshWithMaterial(const Matrix44 model, GFX::Mesh* mesh, SCN
 		lightIntensities.push_back(light->intensity);
 
 		if (use_multipass) {
+			
+			while (lightDirections.size() < 1)
+				lightDirections.push_back(Vector3f(0.0f, 0.0f, -1.0f)); // valor seguro
+
+			while (lightConeInfo.size() < numLights)
+				lightConeInfo.push_back(Vector2f(0.0f, 0.0f));
+
 			if (i == 0) {
 				glDisable(GL_BLEND);
 
-				// Enviar uniformes al shader
-				shader->setUniform("u_numLights", 1);
-				shader->setUniform("u_apply_ambient", true);
-				shader->setUniform3Array("u_light_pos", reinterpret_cast<float*>(lightPositions.data()), 1);
-				shader->setUniform3Array("u_light_color", reinterpret_cast<float*>(lightColors.data()), 1);
-				shader->setUniform1Array("u_light_intensity", lightIntensities.data(), 1);
-				shader->setUniform1Array("u_light_type", lightTypes.data(), 1);
-				shader->setUniform("u_ambient_light", scene->ambient_light);
+				shader->setUniform("u_apply_ambient", 1);
 
-				shader->setUniform3Array("u_light_direction", reinterpret_cast<float*>(lightDirections.data()), 1);
-				shader->setUniform2Array("u_light_cone_info", reinterpret_cast<float*>(lightConeInfo.data()), 1);
-
-				// Render just the verticies as a wireframe
-				if (render_wireframe)
-					glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
-
-				//do the draw call that renders the mesh into the screen
-				mesh->render(GL_TRIANGLES);
-
-				lightPositions.clear();
-				lightColors.clear();
-				lightIntensities.clear();
-				lightTypes.clear();
-				lightDirections.clear();
-				lightConeInfo.clear();
 			}
 			else {
 				glEnable(GL_BLEND);
 
-				// Enviar uniformes al shader
-				shader->setUniform("u_numLights", 1);
-				shader->setUniform("u_apply_ambient", false);
-				shader->setUniform3Array("u_light_pos", reinterpret_cast<float*>(lightPositions.data()), 1);
-				shader->setUniform3Array("u_light_color", reinterpret_cast<float*>(lightColors.data()), 1);
-				shader->setUniform1Array("u_light_intensity", lightIntensities.data(), 1);
-				shader->setUniform1Array("u_light_type", lightTypes.data(), 1);
-
-				shader->setUniform3Array("u_light_direction", reinterpret_cast<float*>(lightDirections.data()), 1);
-				shader->setUniform2Array("u_light_cone_info", reinterpret_cast<float*>(lightConeInfo.data()), 1);
-
-				// Render just the verticies as a wireframe
-				if (render_wireframe)
-					glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
-
-				//do the draw call that renders the mesh into the screen
-				mesh->render(GL_TRIANGLES);
-
-				lightPositions.clear();
-				lightColors.clear();
-				lightIntensities.clear();
-				lightTypes.clear();
-				lightDirections.clear();
-				lightConeInfo.clear();
+				shader->setUniform("u_apply_ambient", 0);
 			}
+
+			shader->setUniform("u_numLights", 1);
+			shader->setUniform3Array("u_light_pos", reinterpret_cast<float*>(lightPositions.data()), 1);
+			shader->setUniform3Array("u_light_color", reinterpret_cast<float*>(lightColors.data()), 1);
+			shader->setUniform1Array("u_light_intensity", lightIntensities.data(), 1);
+			shader->setUniform1Array("u_light_type", lightTypes.data(), 1);
+			shader->setUniform("u_ambient_light", scene->ambient_light);
+
+			shader->setUniform3Array("u_light_direction", reinterpret_cast<float*>(lightDirections.data()), 1);
+			shader->setUniform2Array("u_light_cone_info", reinterpret_cast<float*>(lightConeInfo.data()), 1);
+
+			// Render just the verticies as a wireframe
+			if (render_wireframe)
+				glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+
+			//do the draw call that renders the mesh into the screen
+			mesh->render(GL_TRIANGLES);
+
+			lightPositions.clear();
+			lightColors.clear();
+			lightIntensities.clear();
+			lightTypes.clear();
+			lightDirections.clear();
+			lightConeInfo.clear();
 		}
 	}
 
@@ -412,15 +397,13 @@ void Renderer::renderMeshWithMaterial(const Matrix44 model, GFX::Mesh* mesh, SCN
 		shader->setUniform1Array("u_light_intensity", lightIntensities.data(), numLights);
 		shader->setUniform1Array("u_light_type", lightTypes.data(), numLights);
 		shader->setUniform("u_ambient_light", scene->ambient_light);
-		shader->setUniform("u_apply_ambient", true);
+		shader->setUniform("u_apply_ambient", 1);
 		shader->setUniform3Array("u_light_direction", reinterpret_cast<float*>(lightDirections.data()), numLights);
 		shader->setUniform2Array("u_light_cone_info", reinterpret_cast<float*>(lightConeInfo.data()), numLights);
 
 		// Render just the verticies as a wireframe
 		if (render_wireframe)
 			glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
-
-
 
 		//do the draw call that renders the mesh into the screen
 		mesh->render(GL_TRIANGLES);
@@ -461,6 +444,7 @@ void Renderer::showUI()
 
 
 }
+
 //recursive function to show the shininess sliders
 void Renderer::showShininessSliders(SCN::Node* node) 
 {
@@ -535,7 +519,7 @@ void Renderer::renderToShadowMap() {
 
 	lightCam = configureLightCamera();
 
-	for (auto& cmd : opaqueNodes) {
+	for (sDrawCommand& cmd : opaqueNodes) {
 		renderPlain(lightCam, cmd.model, cmd.mesh, cmd.material);
 	}
 
@@ -551,7 +535,6 @@ void Renderer::renderToShadowMap() {
 		old_viewport[2], old_viewport[3]);
 	glDrawBuffer(old_draw_buf);
 	//glReadBuffer(old_read_buf);
-
 
 }
 
