@@ -35,7 +35,8 @@ float alpha_cutoff = 0;
 using namespace SCN;
 
 //some globals
-
+bool cull_front_faces = true;  
+float shadow_bias = 0.01f; 
 static const int MAX_SHADOW_CASTERS = 4;
 
 GFX::Mesh sphere;
@@ -243,7 +244,6 @@ void Renderer::renderSkybox(GFX::Texture* cubemap)
 	glEnable(GL_DEPTH_TEST);
 }
 // Renders a mesh given its transform and material
-// Renders a mesh given its transform and material
 void Renderer::renderMeshWithMaterial(const Matrix44 model, GFX::Mesh* mesh, SCN::Material* material)
 {
 	//in case there is nothing to do
@@ -275,22 +275,23 @@ void Renderer::renderMeshWithMaterial(const Matrix44 model, GFX::Mesh* mesh, SCN
 
 
 	int nSh = std::min<int>(lights.size(), MAX_SHADOW_CASTERS);
-	for (int i = 0; i < nSh; ++i) {
-		// bindea la textura de profundidad en la unidad 2+i
-		shader->setUniform(
-			shadowNames[i],
-			shadow_FBOs[i].depth_texture,
-			 2 + i
-		);
+	if (!use_multipass) {
+		// --- SINGLE PASS: subimos todas las shadow maps de golpe ---
+		for (int i = 0; i < nSh; ++i) {
+			shader->setUniform(
+				shadowNames[i],
+				shadow_FBOs[i].depth_texture,
+				/*texUnit=*/ 2 + i
+			);
+		}
+		shader->setMatrix44Array("u_shadow_vps", shadow_vps.data(), nSh);
+		shader->setUniform("u_numShadowCasters", nSh);
+		shader->setUniform("u_shadow_bias", shadow_bias);
 	}
-
-	// 2) subimos el array de matrices:
-	shader->setMatrix44Array("u_shadow_vps", shadow_vps.data(), nSh);
-	// 3) número efectivo de casters
-	shader->setUniform("u_numShadowCasters", nSh);
-	// 4) bias
-	shader->setUniform("u_shadow_bias", 0.01f);
-
+	else {
+		// --- MULTIPASS: de entrada no hay sombras globales ---
+		shader->setUniform("u_numShadowCasters", 0);
+	}
 	material->bind(shader);
 
 	//upload uniforms
@@ -436,6 +437,9 @@ void Renderer::showUI()
 	//add here your stuff
 	//...
 	ImGui::Checkbox("Use Multipass Rendering", &use_multipass);
+	ImGui::SliderFloat("Shadow bias", &shadow_bias, 0.0f, 0.1f);
+	ImGui::Checkbox("Cull front faces", &cull_front_faces);
+
 
 	ImGui::SliderFloat("Alpha Cutoff", &alpha_cutoff, 0.0f, 1.0f);
 
@@ -522,8 +526,13 @@ void Renderer::renderToShadowMap() {
 		glDepthMask(GL_TRUE);
 		glClear(GL_DEPTH_BUFFER_BIT);
 
-		glEnable(GL_CULL_FACE);
-		glFrontFace(GL_CW);
+		if (cull_front_faces) {
+			glEnable(GL_CULL_FACE);
+			glFrontFace(GL_CW);
+		}
+		else {
+			glDisable(GL_CULL_FACE);
+		}
 
 		// Configuramos la cámara de esta luz y guardamos su VP
 		lightCam = configureLightCamera(i);
@@ -533,8 +542,9 @@ void Renderer::renderToShadowMap() {
 		for (sDrawCommand& cmd : opaqueNodes)
 			renderPlain(lightCam, cmd.model, cmd.mesh, cmd.material);
 
-		glFrontFace(GL_CCW);
-		glDisable(GL_CULL_FACE);
+		if (cull_front_faces)
+			glFrontFace(GL_CCW);
+
 
 		glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
 
