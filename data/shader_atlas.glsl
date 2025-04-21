@@ -395,8 +395,20 @@ void main() {
 
 \plain.fs
 #version 330 core
+in vec2 v_uv;
+
+uniform int   u_use_mask;
+uniform float u_alpha_cutoff;
+uniform sampler2D u_opacity_map;
+
 out vec4 FragColor;
+
 void main()
 {
-    FragColor = vec4(0.0,0.0,0.0,1.0);
+    if (u_use_mask == 1) {
+        float a = texture(u_opacity_map, v_uv).r;
+        if (a < u_alpha_cutoff) discard;
+    }
+
+    FragColor = vec4(0.0);
 }

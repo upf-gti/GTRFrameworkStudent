@@ -36,7 +36,7 @@ using namespace SCN;
 
 //some globals
 bool cull_front_faces = true;  
-float shadow_bias = 0.01f; 
+float shadow_bias = 0.001f; 
 static const int MAX_SHADOW_CASTERS = 4;
 
 GFX::Mesh sphere;
