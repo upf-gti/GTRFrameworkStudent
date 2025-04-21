@@ -305,7 +305,7 @@ void main() {
 
     vec3 base_color = color.rgb;
 
-    // === Componentes Phong ===
+    // Componentes Phong 
     vec3 ambient = vec3(0.0);
 	if (u_apply_ambient) {
 		ambient = u_ambient_light * base_color;
@@ -350,12 +350,11 @@ void main() {
             attenuation = 1.0;
         }
 		else if (u_light_type[i] == 2) { // Spotlight
-			vec3 lightToFrag = v_world_position - u_light_pos[i];
-			float distance = length(lightToFrag);
-			L = normalize(-lightToFrag); // vector desde el fragmento hacia la luz
+  			L = normalize(u_light_pos[i] - v_world_position);
+            float distance = length(u_light_pos[i] - v_world_position);
     
 			vec3 D = normalize(u_light_direction[i]);
-			float cos_angle = dot(L, D); // L • D
+			float cos_angle = dot(L, D); 
 
 			float cos_alpha_min = cos(u_light_cone_info[i].x);
 			float cos_alpha_max = cos(u_light_cone_info[i].y);
@@ -377,7 +376,7 @@ void main() {
 		float R_dot_V = clamp(dot(R, V), 0.0, 1.0);
 
 		vec3 light_diffuse = base_color * N_dot_L * u_light_color[i] * u_light_intensity[i] * attenuation;
-		vec3 light_specular = u_light_color[i] * u_light_intensity[i] * attenuation * pow(R_dot_V, u_shininess);
+		vec3 light_specular = base_color * u_light_color[i] * u_light_intensity[i] * attenuation * pow(R_dot_V, u_shininess);
 
 	// todas las luces con shadow_factor<1 lo tomarán en cuenta
 	if (i < u_numShadowCasters &&(u_light_type[i]==1 || u_light_type[i]==2) ){
@@ -385,11 +384,9 @@ void main() {
 		light_specular *= shadow_factor;
    }
 
-
 	diffuse_total += light_diffuse;
 	specular_total += light_specular;
-
-				
+			
     }
 
 	vec3 final_color = ambient + (diffuse_total + specular_total);

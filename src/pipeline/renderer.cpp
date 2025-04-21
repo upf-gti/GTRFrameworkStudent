@@ -275,23 +275,7 @@ void Renderer::renderMeshWithMaterial(const Matrix44 model, GFX::Mesh* mesh, SCN
 
 
 	int nSh = std::min<int>(lights.size(), MAX_SHADOW_CASTERS);
-	if (!use_multipass) {
-		// --- SINGLE PASS: subimos todas las shadow maps de golpe ---
-		for (int i = 0; i < nSh; ++i) {
-			shader->setUniform(
-				shadowNames[i],
-				shadow_FBOs[i].depth_texture,
-				/*texUnit=*/ 2 + i
-			);
-		}
-		shader->setMatrix44Array("u_shadow_vps", shadow_vps.data(), nSh);
-		shader->setUniform("u_numShadowCasters", nSh);
-		shader->setUniform("u_shadow_bias", shadow_bias);
-	}
-	else {
-		// --- MULTIPASS: de entrada no hay sombras globales ---
-		shader->setUniform("u_numShadowCasters", 0);
-	}
+
 	material->bind(shader);
 
 	//upload uniforms
@@ -362,6 +346,18 @@ void Renderer::renderMeshWithMaterial(const Matrix44 model, GFX::Mesh* mesh, SCN
 	}
 
 	if (!use_multipass) {
+		// --- SINGLE PASS: subimos todas las shadow maps de golpe ---
+		for (int i = 0; i < nSh; ++i) {
+			shader->setUniform(
+				shadowNames[i],
+				shadow_FBOs[i].depth_texture,
+				/*texUnit=*/ 2 + i
+			);
+		}
+		shader->setMatrix44Array("u_shadow_vps", shadow_vps.data(), nSh);
+		shader->setUniform("u_numShadowCasters", nSh);
+		shader->setUniform("u_shadow_bias", shadow_bias);
+
 
 		shader->setUniform("u_numLights", numLights);
 		shader->setUniform3Array("u_light_pos", reinterpret_cast<float*>(lightPositions.data()), numLights);
@@ -385,6 +381,20 @@ void Renderer::renderMeshWithMaterial(const Matrix44 model, GFX::Mesh* mesh, SCN
 		glBlendFunc(GL_SRC_ALPHA, GL_ONE);
 
 		for (int i = 0; i < numLights; i++) {
+
+
+			bool hasShadow = (i < nSh) && (lightTypes[i] == 1 || lightTypes[i] == 2);
+			if (hasShadow) {
+				shader->setUniform(shadowNames[0], shadow_FBOs[i].depth_texture, 2);
+				shader->setMatrix44Array("u_shadow_vps", &shadow_vps[i], 1);
+				shader->setUniform("u_numShadowCasters", 1);
+				shader->setUniform("u_shadow_bias", shadow_bias);
+			}
+			else {
+				// no hay sombra en esta pasada
+				shader->setUniform("u_numShadowCasters", 0);
+			}
+
 			if (i == 0) {
 				glDisable(GL_BLEND);
 
