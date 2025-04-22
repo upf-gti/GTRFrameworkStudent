@@ -2,6 +2,8 @@
 #include "scene.h"
 #include "prefab.h"
 #include "light.h"
+#include "camera.h"
+
 
 #define MAX_NUM_LIGHTS 10
 
@@ -39,6 +41,9 @@ namespace SCN {
 		std::vector<sDrawCommand> draw_command_opaque_list;		// Lab 1
 		std::vector<sDrawCommand> draw_command_transparent_list;// Lab 1
 		std::vector<LightEntity*> lights_list;					// Lab 2
+		GFX::Texture* texture;
+		GFX::FBO* shadow_fbo;
+
 
 		//updated every frame
 		Renderer(const char* shaders_atlas_filename );
@@ -61,8 +66,10 @@ namespace SCN {
 		//to render one mesh given its material and transformation matrix
 		void renderMeshWithMaterial(const Matrix44 model, GFX::Mesh* mesh, SCN::Material* material);
 
-		//render the shadows given all lights (LAB 3)
-		void renderShadows(LightEntity* light);
+		//render the shadows given a light and an FBO
+		void renderShadows(LightEntity* light, GFX::FBO* fbo);
+
+		void renderPlain(Camera cam, const Matrix44 model, GFX::Mesh* mesh, SCN::Material* material);
 
 		void showUI();
 	};

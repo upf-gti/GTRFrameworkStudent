@@ -5,6 +5,7 @@ skybox basic.vs skybox.fs
 depth quad.vs depth.fs
 multi basic.vs multi.fs
 compute test.cs
+plain basic.vs plain.fs
 
 \test.cs
 #version 430 core
@@ -300,4 +301,16 @@ void main()
 
 	//calcule the position of the vertex using the matrices
 	gl_Position = u_viewprojection * vec4( v_world_position, 1.0 );
+}
+
+\plain.fs
+
+#version 330 core
+
+out vec4 FragColor;
+
+void main()
+{
+	//Some alpha testing would be good here
+	FragColor = vec4(0.0, 0.0, 0.0, 1.0);
 }
