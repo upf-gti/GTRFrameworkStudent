@@ -1,6 +1,5 @@
 //example of some shaders compiled
 flat basic.vs flat.fs
-plain basic.vs plain.fs
 texture basic.vs texture.fs
 skybox basic.vs skybox.fs
 depth quad.vs depth.fs
@@ -27,6 +26,7 @@ in vec2 a_coord;
 in vec4 a_color;
 
 uniform vec3 u_camera_pos;
+
 uniform mat4 u_model;
 uniform mat4 u_viewprojection;
 
@@ -87,7 +87,7 @@ void main()
 }
 
 
-// LAB 2
+//LAB2 lighting and LAB3 shadows
 \texture.fs
 
 #version 330 core
@@ -116,8 +116,24 @@ uniform float u_light_cos_angle_max[10];	// cos(alpha_max)
 uniform float u_light_cos_angle_min[10];	// cos(alpha_min)
 
 uniform sampler2D u_shadowmap;
+uniform mat4 u_shadowvp;
+uniform float u_shadow_bias;
 
 out vec4 FragColor;
+
+float computeShadow(vec3 world_pos) {
+    vec4 light_space_pos = u_shadowvp * vec4(world_pos, 1.0);
+    vec3 proj_coords = light_space_pos.xyz / light_space_pos.w;
+    proj_coords = proj_coords * 0.5 + 0.5;
+
+    if (proj_coords.x < 0.0 || proj_coords.x > 1.0 || proj_coords.y < 0.0 || proj_coords.y > 1.0)
+        return 0.0;
+
+    float closest_depth = texture(u_shadowmap, proj_coords.xy).r;
+    float current_depth = proj_coords.z;
+    return (current_depth - u_shadow_bias) > closest_depth ? 1.0 : 0.0;
+}
+
 
 void main()
 {
@@ -128,6 +144,8 @@ void main()
 	vec3 ambient_component = u_light_ambient;
 	vec3 diffuse_component = vec3(0.0);
 	vec3 specular_component = vec3(0.0);
+
+	float shadow = 0.0;
 
 	for(int i = 0; i < u_num_lights; i++) 
 	{
@@ -167,13 +185,20 @@ void main()
 				angular_attenuation = 1 - clamp((dot(L, D) - cos_min) / min(cos_max - cos_min, -0.00001), 0.0, 1.0);
 			} 
 			attenuation *= angular_attenuation;
+			shadow = computeShadow(v_world_position);
 		}
 		else if (u_light_types[i] == 3 )
 		{	 
 			//DIRECTIONAL
 			light_position = u_light_positions[i];
 			attenuation = 1.0;
+			shadow = computeShadow(v_world_position);
 		}
+
+		// Skip light contribution if in shadow (only for directional and spot lights)
+        if ((u_light_types[i] == 3 || u_light_types[i] == 2) && shadow > 0.5) {
+            continue;
+        }
 
 		light_position = normalize(light_position);
 		vec3 view_position = normalize(u_camera_position - v_world_position);
@@ -194,29 +219,6 @@ void main()
 	color.xyz *= ambient_component + diffuse_component + specular_component;
 	FragColor = color;
 }
-
-// LAB 3
-\plain.fs
-
-#version 330 core
-
-in vec3 v_position;
-in vec3 v_world_position;
-in vec3 v_normal;
-in vec2 v_uv;
-
-uniform sampler2D u_shadowmap;
-
-out vec4 FragColor;
-
-void main()
-{
-	vec2 uv = v_uv;
-	float depth = texture(u_shadowmap, v_uv).x;
-
-	FragColor = vec4(vec3(depth), 1.0);
-}
-
 
 
 \skybox.fs
