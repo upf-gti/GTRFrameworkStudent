@@ -288,17 +288,16 @@ void Renderer::renderSkybox(GFX::Texture* cubemap) const
 }
 
 // Renders a mesh given its transform and material
-void Renderer::renderMeshWithMaterial(const Matrix44 model, GFX::Mesh* mesh, SCN::Material* material) const
+void Renderer::renderMeshWithMaterial(const Matrix44 model, GFX::Mesh* mesh, SCN::Material* material)
 {
-	Camera* camera = Camera::current;
-
 	//in case there is nothing to do
 	if (!mesh || !mesh->getNumVertices() || !material)
 		return;
 	assert(glGetError() == GL_NO_ERROR);
 
 	//define locals to simplify coding
-	GFX::Shader* shader = nullptr;
+	GFX::Shader* shader = NULL;
+	Camera* camera = Camera::current;
 
 	glEnable(GL_DEPTH_TEST);
 
@@ -315,17 +314,15 @@ void Renderer::renderMeshWithMaterial(const Matrix44 model, GFX::Mesh* mesh, SCN
 	material->bind(shader);
 
 	// Sending the lights
-	int n = this->light_command.num_lights;
-	shader->setUniform("u_num_lights", n);
-	shader->setFloat("u_shininess", material->shininess);
-	shader->setUniform3("u_light_ambient", this->light_command.light_ambient);
-	shader->setUniform1Array("u_light_types", (int*)this->light_command.light_types, n);
-	shader->setUniform1Array("u_light_intensities", (float*)this->light_command.light_intensities, n);
-	shader->setUniform3Array("u_light_positions", (float*)this->light_command.light_positions, n);
-	shader->setUniform3Array("u_light_colors", (float*)this->light_command.light_colors, n);
-	shader->setUniform3Array("u_light_directions", (float*)this->light_command.light_directions, n);
-	shader->setUniform1Array("u_light_cos_angle_min", (float*)this->light_command.light_cos_angle_min, n);
-	shader->setUniform1Array("u_light_cos_angle_max", (float*)this->light_command.light_cos_angle_max, n);
+	int num_lights = min(MAX_NUM_LIGHTS, this->lights_list.size());
+	vec3 light_ambient = this->scene->ambient_light;
+	vec3 light_positions[MAX_NUM_LIGHTS];
+	vec3 light_colors[MAX_NUM_LIGHTS];
+	vec3 light_directions[MAX_NUM_LIGHTS];
+	float light_intensities[MAX_NUM_LIGHTS] = { 0.0f };
+	float light_cos_angle_max[MAX_NUM_LIGHTS] = { 0.0f };
+	float light_cos_angle_min[MAX_NUM_LIGHTS] = { 0.0f };
+	int light_types[MAX_NUM_LIGHTS] = { 0 };
 
 	// Sending the shadowmap (not finished)
 
@@ -350,7 +347,7 @@ void Renderer::renderMeshWithMaterial(const Matrix44 model, GFX::Mesh* mesh, SCN
 	shader->setUniform("u_camera_position", camera->eye);
 
 	// Upload time, for cool shader effects
-	float time = (float)getTime();
+	float time = getTime();
 	shader->setUniform("u_time", time);
 
 	// Render just the verticies as a wireframe

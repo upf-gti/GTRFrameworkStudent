@@ -59,11 +59,8 @@ namespace SCN {
 		SCN::sLightCommand light_command; //lab 2
 		
 		std::vector<GFX::FBO*> shadow_FBOs; //lab 3
-		std::vector<Camera*> light_cameras; //lab 3
-		std::vector<Camera*> camera_light_list;
-
-		GFX::FBO* shadow_fbo; //lab 3
-	
+		std::vector<Camera*> camera_light_list; //lab 3
+		
 		//updated every frames
 		Renderer(const char* shaders_atlas_filename);
 
