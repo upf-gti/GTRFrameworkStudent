@@ -55,7 +55,9 @@ namespace SCN {
 		std::vector<SCN::sDrawCommand> draw_command_opaque_list; //lab 1
 		std::vector<SCN::sDrawCommand> draw_command_transparent_list;//lab 1
 		SCN::sLightCommand light_command; //lab 2
-		std::vector<GFX::FBO*> shadow_FBOs; //lab 3
+		//std::vector<GFX::FBO*> shadow_FBOs; //lab 3
+		GFX::FBO* shadow_fbo;
+		GFX::Texture* texture;
 
 		//updated every frame
 		Renderer(const char* shaders_atlas_filename);
@@ -87,7 +89,7 @@ namespace SCN {
 		//render the shadows given a light and an FBO
 		void renderShadows(LightEntity* light, GFX::FBO* shadow_FBO);
 
-		void renderPlain(Camera cam, const Matrix44 model, GFX::Mesh* mesh, SCN::Material* material);
+		void renderPlain(Camera* camera, const Matrix44 model, GFX::Mesh* mesh, SCN::Material* material);
 
 		void showUI();
 	};

@@ -30,11 +30,11 @@ Renderer::Renderer(const char* shader_atlas_filename)
 	this->scene = nullptr;
 	this->skybox_cubemap = nullptr;
 
-	for (int i = 0; i < MAX_NUM_LIGHTS; i++) {
+	/*for (int i = 0; i < MAX_NUM_LIGHTS; i++) {
 		GFX::FBO* shadow_FBO = new GFX::FBO();
 		shadow_FBO->setDepthOnly(1024, 1024);
 		this->shadow_FBOs.push_back(shadow_FBO);
-	}
+	}*/
 
 	if (!GFX::Shader::LoadAtlas(shader_atlas_filename))
 		exit(1);
@@ -60,6 +60,8 @@ void Renderer::setupScene()
 	}
 }
 
+
+//store Children Prefab Entities
 void Renderer::parseNode(SCN::Node* node, Camera* cam)
 {
 	if (!node) {
@@ -80,7 +82,6 @@ void Renderer::parseNode(SCN::Node* node, Camera* cam)
 		}
 	}
 
-	// Store Children Prefab Entities
 	for (SCN::Node* child : node->children) {
 		this->parseNode(child, cam);
 	}
@@ -162,8 +163,8 @@ void Renderer::renderScene(SCN::Scene* scene, Camera* camera)
 	this->setupScene();
 	this->parseSceneEntities(scene, camera);
 
-	for (LightEntity* light : this->lights_list) {
-		if ((light->light_type == 3) or (light->light_type == 2)) {
+	for (LightEntity* light : this->light_list) {
+		if ((light->light_type == eLightType::DIRECTIONAL) or (light->light_type == eLightType::SPOT)) {
 			this->renderShadows(light, shadow_fbo);
 		}
 	}
@@ -197,9 +198,9 @@ void Renderer::renderScene(SCN::Scene* scene, Camera* camera)
 
 	/////////////////////////////////////////
 	// TODO: Render shadows
-	for (int i = 0; i < this->light_command.num_lights; i++) {
-		this->renderShadows(this->light_list.at(i), this->shadow_FBOs.at(i));
-	}
+	//for (int i = 0; i < this->light_command.num_lights; i++) {
+	//	this->renderShadows(this->light_list.at(i), this->shadow_FBOs.at(i));
+	//}
 	/////////////////////////////////////////
 
 	// Render opaque entities
@@ -263,6 +264,8 @@ void Renderer::renderSkybox(GFX::Texture* cubemap) const
 // Renders a mesh given its transform and material
 void Renderer::renderMeshWithMaterial(const Matrix44 model, GFX::Mesh* mesh, SCN::Material* material) const
 {
+	Camera* camera = Camera::current;
+
 	//in case there is nothing to do
 	if (!mesh || !mesh->getNumVertices() || !material)
 		return;
@@ -270,7 +273,6 @@ void Renderer::renderMeshWithMaterial(const Matrix44 model, GFX::Mesh* mesh, SCN
 
 	//define locals to simplify coding
 	GFX::Shader* shader = nullptr;
-	Camera* camera = Camera::current;
 
 	glEnable(GL_DEPTH_TEST);
 
@@ -299,7 +301,7 @@ void Renderer::renderMeshWithMaterial(const Matrix44 model, GFX::Mesh* mesh, SCN
 	shader->setUniform1Array("u_light_cos_angle_min", (float*)this->light_command.light_cos_angle_min, n);
 	shader->setUniform1Array("u_light_cos_angle_max", (float*)this->light_command.light_cos_angle_max, n);
 
-	shader->setUniform("u_shadowmap", shadow_fbo->depth_texture, 2);
+	shader->setUniform("u_shadowmap", this->shadow_fbo->depth_texture, 2);
 
 	// Upload model matrix
 	shader->setUniform("u_model", model);
@@ -328,10 +330,10 @@ void Renderer::renderMeshWithMaterial(const Matrix44 model, GFX::Mesh* mesh, SCN
 }
 
 //to render shadows (lab 3)
-void Renderer::renderShadows(LightEntity* light, GFX::FBO* shadow_FBO) 
+void Renderer::renderShadows(LightEntity* light, GFX::FBO* shadow_fbo) 
 {
 	//Create the shadow frame buffer object
-	shadow_FBO->bind();
+	shadow_fbo->bind();
 
 	glColorMask(false, false, false, false);
 	glClear(GL_DEPTH_BUFFER_BIT);
@@ -350,63 +352,31 @@ void Renderer::renderShadows(LightEntity* light, GFX::FBO* shadow_FBO)
 	float near_plane = light->near_distance;
 	float far_plane = light->max_distance;
 
-	if (light->light_type == 3) {
-		light_camera.setOrthographic(-half_size, half_size,
-			-half_size, half_size, near_plane, far_plane);
+	if (light->light_type == eLightType::DIRECTIONAL) {
+		light_camera.setOrthographic(-half_size, half_size, -half_size, half_size, near_plane, far_plane);
 	}
-	else if (light->light_type == 2) {
+	else if (light->light_type == eLightType::SPOT) {
 		light_camera.setPerspective(2.0f * light->cone_info.y, 1.0f, near_plane, far_plane);
 	}
 
 	//Render the meshes with the point of view of the light camera
 	for (sDrawCommand& draw_command : this->draw_command_opaque_list) {
-		renderPlain(light_camera, draw_command.model, draw_command.mesh, draw_command.material);
+		this->renderPlain(&light_camera, draw_command.model, draw_command.mesh, draw_command.material);
 	}
 
 	//Check parameters of the orthographic first!
 	glColorMask(true, true, true, true);
 
-	shadow_FBO->unbind();
+	shadow_fbo->unbind();
 }
 
-void Renderer::renderPlain(GFX::FBO* shadow_FBO, Camera* light_camera, const Matrix44 model, GFX::Mesh* mesh) const
-{
-	if (!mesh || !mesh->getNumVertices() || !light_camera)
-		return;
-
-	assert(glGetError() == GL_NO_ERROR);
-	
-	GFX::Shader* shader = nullptr;
-	
-	glEnable(GL_DEPTH_TEST);
-	shader = GFX::Shader::Get("plain");
-	assert(glGetError() == GL_NO_ERROR);
-	if (!shader)
-		return;
-	
-	shader->enable();
-	shader->setUniform("u_viewprojection", light_camera->viewprojection_matrix);
-	shader->setUniform("u_camera_position", light_camera->eye);
-	shader->setUniform("u_model", model);
-	//shader->setTexture("u_shadowmap", shadow_FBO->depth_texture, 2);
-	
-	if (this->render_wireframe)
-		glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
-	
-	mesh->render(GL_TRIANGLES);
-	shader->disable();
-	
-	glDisable(GL_BLEND);
-	glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
-}
-
-void Renderer::renderPlain(Camera cam, const Matrix44 model, GFX::Mesh* mesh, SCN::Material* material)
+void Renderer::renderPlain(Camera* camera, const Matrix44 model, GFX::Mesh* mesh, SCN::Material* material)
 {
 	if (!mesh || !mesh->getNumVertices() || !material)
 		return;
 	assert(glGetError() == GL_NO_ERROR);
 
-	GFX::Shader* shader = NULL;
+	GFX::Shader* shader = nullptr;
 	glEnable(GL_DEPTH_TEST);
 
 	//use plain shader
@@ -423,8 +393,8 @@ void Renderer::renderPlain(Camera cam, const Matrix44 model, GFX::Mesh* mesh, SC
 	material->bind(shader);
 	shader->setUniform("u_model", model);
 
-	shader->setUniform("u_viewprojection", cam.viewprojection_matrix);
-	shader->setUniform("u_camera_position", cam.eye);
+	shader->setUniform("u_viewprojection", camera->viewprojection_matrix);
+	shader->setUniform("u_camera_position", camera->eye);
 
 	mesh->render(GL_TRIANGLES);
 
