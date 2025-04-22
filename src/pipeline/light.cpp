@@ -8,7 +8,7 @@ SCN::LightEntity::LightEntity()
 	light_type = eLightType::POINT;
 	color.set(1, 1, 1);
 	direction.set(0, -1, 0); //Default direction
-	cone_info.set(25, 40); //We have delete toCos because these are angles
+	cone_info.set(25, 40);
 	intensity = 1;
 	max_distance = 100;
 	cast_shadows = false;
