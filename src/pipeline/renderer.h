@@ -2,6 +2,8 @@
 #include "scene.h"
 #include "prefab.h"
 #include "light.h"
+#include "camera.h"
+
 
 #define MAX_NUM_LIGHTS 10
 
@@ -19,7 +21,7 @@ namespace SCN {
 	class Prefab;
 	class Material;
 
-	// Generate the renderer call struct
+	//generate the renderer call struct
 	struct sDrawCommand {
 		GFX::Mesh* mesh = nullptr;
 		SCN::Material* material = nullptr;
@@ -39,8 +41,8 @@ namespace SCN {
 	};
 
 
-	// This class is in charge of rendering anything in our system.
-	// Separating the render from anything else makes the code cleaner
+	//this class is in charge of rendering anything in our system.
+	//separating the render from anything else makes the code cleaner
 	class Renderer
 	{
 	public:
@@ -48,17 +50,15 @@ namespace SCN {
 		bool render_boundaries;
 		GFX::Texture* skybox_cubemap;
 		SCN::Scene* scene;
-		std::vector<sDrawCommand> draw_command_opaque_list;		// Lab 1
-		std::vector<sDrawCommand> draw_command_transparent_list;// Lab 1
-		SCN::sLightCommand light_command;
-		std::vector<SCN::LightEntity*> light_list;
-		std::vector<SCN::PrefabEntity*> prefab_list;
-		std::vector<GFX::FBO*> shadow_FBOs;
-
-		//std::vector<LightEntity*> lights_list;					// Lab 2
+		std::vector<SCN::PrefabEntity*> prefab_list; //lab 1
+		std::vector<SCN::LightEntity*> light_list; //lab 2
+		std::vector<SCN::sDrawCommand> draw_command_opaque_list; //lab 1
+		std::vector<SCN::sDrawCommand> draw_command_transparent_list;//lab 1
+		SCN::sLightCommand light_command; //lab 2
+		std::vector<GFX::FBO*> shadow_FBOs; //lab 3
 
 		//updated every frame
-		Renderer(const char* shaders_atlas_filename );
+		Renderer(const char* shaders_atlas_filename);
 
 		//just to be sure we have everything ready for the rendering
 		void setupScene();
@@ -82,10 +82,12 @@ namespace SCN {
 		//to render one mesh given its material and transformation matrix
 		void renderMeshWithMaterial(const Matrix44 model, GFX::Mesh* mesh, SCN::Material* material) const;
 
-		void renderPlain(GFX::FBO* shadow_FBO, Camera* camera, const Matrix44 model, GFX::Mesh* mesh) const;
+		//void renderPlain(GFX::FBO* shadow_FBO, Camera* camera, const Matrix44 model, GFX::Mesh* mesh) const;
 
-		//render the shadows given all lights (LAB 3)
+		//render the shadows given a light and an FBO
 		void renderShadows(LightEntity* light, GFX::FBO* shadow_FBO);
+
+		void renderPlain(Camera cam, const Matrix44 model, GFX::Mesh* mesh, SCN::Material* material);
 
 		void showUI();
 	};
