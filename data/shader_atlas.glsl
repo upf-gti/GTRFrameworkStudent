@@ -1,5 +1,6 @@
 //example of some shaders compiled
 flat basic.vs flat.fs
+plain basic.vs plain.fs
 texture basic.vs texture.fs
 skybox basic.vs skybox.fs
 depth quad.vs depth.fs
@@ -25,7 +26,6 @@ in vec2 a_coord;
 in vec4 a_color;
 
 uniform vec3 u_camera_pos;
-
 uniform mat4 u_model;
 uniform mat4 u_viewprojection;
 
@@ -191,6 +191,29 @@ void main()
 	color.xyz *= ambient_component + diffuse_component + specular_component;
 	FragColor = color;
 }
+
+// LAB 3
+\plain.fs
+
+#version 330 core
+
+in vec3 v_position;
+in vec3 v_world_position;
+in vec3 v_normal;
+in vec2 v_uv;
+
+uniform sampler2D u_shadowmap;
+
+out vec4 FragColor;
+
+void main()
+{
+	vec2 uv = v_uv;
+	float depth = texture(u_shadowmap, v_uv).x;
+
+	FragColor = vec4(vec3(depth), 1.0);
+}
+
 
 
 \skybox.fs

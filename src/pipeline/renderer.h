@@ -21,9 +21,21 @@ namespace SCN {
 
 	// Generate the renderer call struct
 	struct sDrawCommand {
-		GFX::Mesh* mesh;
-		SCN::Material* material;
+		GFX::Mesh* mesh = nullptr;
+		SCN::Material* material = nullptr;
 		Matrix44 model;
+	};
+
+	struct sLightCommand {
+		int num_lights;
+		vec3 light_ambient;
+		vec3 light_positions[MAX_NUM_LIGHTS];
+		vec3 light_colors[MAX_NUM_LIGHTS];
+		vec3 light_directions[MAX_NUM_LIGHTS];
+		float light_intensities[MAX_NUM_LIGHTS] = { 0.0f };
+		float light_cos_angle_max[MAX_NUM_LIGHTS] = { 0.0f };
+		float light_cos_angle_min[MAX_NUM_LIGHTS] = { 0.0f };
+		int light_types[MAX_NUM_LIGHTS] = { 0 };
 	};
 
 
@@ -38,7 +50,12 @@ namespace SCN {
 		SCN::Scene* scene;
 		std::vector<sDrawCommand> draw_command_opaque_list;		// Lab 1
 		std::vector<sDrawCommand> draw_command_transparent_list;// Lab 1
-		std::vector<LightEntity*> lights_list;					// Lab 2
+		SCN::sLightCommand light_command;
+		std::vector<SCN::LightEntity*> light_list;
+		std::vector<SCN::PrefabEntity*> prefab_list;
+		std::vector<GFX::FBO*> shadow_FBOs;
+
+		//std::vector<LightEntity*> lights_list;					// Lab 2
 
 		//updated every frame
 		Renderer(const char* shaders_atlas_filename );
@@ -48,6 +65,10 @@ namespace SCN {
 
 		//initialises the draw command lists for one entity
 		void parseNode(SCN::Node* node, Camera* cam);
+
+		void parseLights(std::vector<SCN::LightEntity*> light_list, SCN::Scene* scene);
+
+		void parsePrefabs(std::vector<SCN::PrefabEntity*> prefab_list, Camera* camera);
 
 		//initialises the draw command and lights lists for all entities
 		void parseSceneEntities(SCN::Scene* scene, Camera* camera);
@@ -59,10 +80,12 @@ namespace SCN {
 		void renderSkybox(GFX::Texture* cubemap) const;
 
 		//to render one mesh given its material and transformation matrix
-		void renderMeshWithMaterial(const Matrix44 model, GFX::Mesh* mesh, SCN::Material* material);
+		void renderMeshWithMaterial(const Matrix44 model, GFX::Mesh* mesh, SCN::Material* material) const;
+
+		void renderPlain(GFX::FBO* shadow_FBO, Camera* camera, const Matrix44 model, GFX::Mesh* mesh) const;
 
 		//render the shadows given all lights (LAB 3)
-		void renderShadows(LightEntity* light);
+		void renderShadows(LightEntity* light, GFX::FBO* shadow_FBO);
 
 		void showUI();
 	};

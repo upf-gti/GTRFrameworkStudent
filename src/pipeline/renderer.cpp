@@ -30,6 +30,12 @@ Renderer::Renderer(const char* shader_atlas_filename)
 	this->scene = nullptr;
 	this->skybox_cubemap = nullptr;
 
+	for (int i = 0; i < MAX_NUM_LIGHTS; i++) {
+		GFX::FBO* shadow_FBO = new GFX::FBO();
+		shadow_FBO->setDepthOnly(1024, 1024);
+		this->shadow_FBOs.push_back(shadow_FBO);
+	}
+
 	if (!GFX::Shader::LoadAtlas(shader_atlas_filename))
 		exit(1);
 	GFX::checkGLErrors();
@@ -75,33 +81,68 @@ void Renderer::parseNode(SCN::Node* node, Camera* cam)
 	}
 }
 
-// HERE =====================
-// TODO: GENERATE RENDERABLES
-// ==========================
-void Renderer::parseSceneEntities(SCN::Scene* scene, Camera* cam) 
+void Renderer::parsePrefabs(std::vector<SCN::PrefabEntity*> prefab_list, Camera* camera)
 {
 	this->draw_command_opaque_list.clear();
 	this->draw_command_transparent_list.clear();
-	this->lights_list.clear();
+	for (PrefabEntity* prefab : prefab_list) {
+		Node* node = &prefab->root;
+		this->parseNode(node, camera);
+	}
+}
 
-	for (int i = 0; i < scene->entities.size(); i++) {
-		BaseEntity* entity = scene->entities[i];
+void Renderer::parseLights(std::vector<SCN::LightEntity*> light_list, SCN::Scene* scene)
+{
+	this->light_command.num_lights = min(MAX_NUM_LIGHTS, (int)light_list.size());
+	int i = 0;
+	for (LightEntity* light : light_list) {
+		this->light_command.light_positions[i] = light->root.getGlobalMatrix().getTranslation();
+		this->light_command.light_intensities[i] = light->intensity;
+		this->light_command.light_types[i] = light->light_type;
+		this->light_command.light_colors[i] = light->color;
 
+		if (light->light_type == eLightType::SPOT) {
+			this->light_command.light_directions[i] = light->root.getGlobalMatrix().rotateVector(light->direction);
+			this->light_command.light_cos_angle_max[i] = light->toCos(light->getCosAngleMax());
+			this->light_command.light_cos_angle_min[i] = light->toCos(light->getCosAngleMin());
+		}
+		else {
+			this->light_command.light_directions[i] = vec3(0.0f);
+			this->light_command.light_cos_angle_min[i] = 0.0f;
+			this->light_command.light_cos_angle_max[i] = 0.0f;
+		}
+		i++;
+	}
+}
+
+
+// HERE =====================
+// TODO: GENERATE RENDERABLES
+// ==========================
+void Renderer::parseSceneEntities(SCN::Scene* scene, Camera* camera) 
+{
+	this->light_list.clear();
+	this->prefab_list.clear();
+
+	for (BaseEntity* entity : scene->entities) {
 		if (!entity->visible) {
 			continue;
 		}
-	
+
 		// Store Prefab Entities
 		if (entity->getType() == eEntityType::PREFAB) {
-			this->parseNode(&((PrefabEntity*)entity)->root, cam);
+			this->prefab_list.push_back((PrefabEntity*)entity);
 			continue;
 		}
 
 		// Store Lights
 		if (entity->getType() == eEntityType::LIGHT) {
-			this->lights_list.push_back((LightEntity*)entity);
+			this->light_list.push_back((LightEntity*)entity);
 		}
 	}
+
+	this->parseLights(light_list, scene);
+	this->parsePrefabs(prefab_list, camera);
 }
 
 // HERE =====================
@@ -144,12 +185,12 @@ void Renderer::renderScene(SCN::Scene* scene, Camera* camera)
 			return distA > distB; // Farthest first
 		});
 
-	///////////////////////////////////////////
+	/////////////////////////////////////////
 	// TODO: Render shadows
-	//for (LightEntity* light : this->lights_list) {
-	//	this->renderShadows(light);
-	//}
-	///////////////////////////////////////////
+	for (int i = 0; i < this->light_command.num_lights; i++) {
+		this->renderShadows(this->light_list.at(i), this->shadow_FBOs.at(i));
+	}
+	/////////////////////////////////////////
 
 	// Render opaque entities
 	for (sDrawCommand draw_command : this->draw_command_opaque_list) {
@@ -210,7 +251,7 @@ void Renderer::renderSkybox(GFX::Texture* cubemap) const
 }
 
 // Renders a mesh given its transform and material
-void Renderer::renderMeshWithMaterial(const Matrix44 model, GFX::Mesh* mesh, SCN::Material* material)
+void Renderer::renderMeshWithMaterial(const Matrix44 model, GFX::Mesh* mesh, SCN::Material* material) const
 {
 	//in case there is nothing to do
 	if (!mesh || !mesh->getNumVertices() || !material )
@@ -218,7 +259,7 @@ void Renderer::renderMeshWithMaterial(const Matrix44 model, GFX::Mesh* mesh, SCN
     assert(glGetError() == GL_NO_ERROR);
 
 	//define locals to simplify coding
-	GFX::Shader* shader = NULL;
+	GFX::Shader* shader = nullptr;
 	Camera* camera = Camera::current;
 
 	glEnable(GL_DEPTH_TEST);
@@ -236,49 +277,17 @@ void Renderer::renderMeshWithMaterial(const Matrix44 model, GFX::Mesh* mesh, SCN
 	material->bind(shader);
 
 	// Sending the lights
-	int num_lights = min(MAX_NUM_LIGHTS, this->lights_list.size());
-	vec3 light_ambient = this->scene->ambient_light;
-	vec3 light_positions[MAX_NUM_LIGHTS];
-	vec3 light_colors[MAX_NUM_LIGHTS];
-	vec3 light_directions[MAX_NUM_LIGHTS];
-	float light_intensities[MAX_NUM_LIGHTS] = { 0.0f };
-	float light_cos_angle_max[MAX_NUM_LIGHTS] = { 0.0f };
-	float light_cos_angle_min[MAX_NUM_LIGHTS] = { 0.0f };
-	int light_types[MAX_NUM_LIGHTS] = { 0 };
-
-	for (int i = 0; i < num_lights; i++) 
-	{
-		LightEntity* light = this->lights_list.at(i);
-		light_positions[i] = light->root.getGlobalMatrix().getTranslation();
-		light_intensities[i] = light->intensity;
-		light_types[i] = light->light_type;
-		light_colors[i] = light->color;
-		
-		if (light->light_type == eLightType::SPOT)
-		{  
-			light_directions[i] = light->root.getGlobalMatrix().rotateVector(light->direction);
-			light_cos_angle_max[i] = light->toCos(light->getCosAngleMax());
-			light_cos_angle_min[i] = light->toCos(light->getCosAngleMin());
-		}
-		else 
-		{
-			light_directions[i] = vec3(0.0f); 
-			light_cos_angle_min[i] = 0.0f;
-			light_cos_angle_max[i] = 0.0f;
-		}
-	}
-
-	// Upload light information
-	shader->setUniform("u_num_lights", num_lights);
+	int n = this->light_command.num_lights;
+	shader->setUniform("u_num_lights", n);
 	shader->setFloat("u_shininess", material->shininess);
-	shader->setUniform3("u_light_ambient", light_ambient);
-	shader->setUniform1Array("u_light_types", (int*)light_types, num_lights);
-	shader->setUniform1Array("u_light_intensities", (float*)light_intensities, num_lights);
-	shader->setUniform3Array("u_light_positions", (float*)light_positions, num_lights);
-	shader->setUniform3Array("u_light_colors", (float*)light_colors, num_lights);
-	shader->setUniform3Array("u_light_directions", (float*)light_directions, num_lights);
-	shader->setUniform1Array("u_light_cos_angle_min", (float*)light_cos_angle_min, num_lights);
-	shader->setUniform1Array("u_light_cos_angle_max", (float*)light_cos_angle_max, num_lights);
+	shader->setUniform3("u_light_ambient", this->light_command.light_ambient);
+	shader->setUniform1Array("u_light_types", (int*)this->light_command.light_types, n);
+	shader->setUniform1Array("u_light_intensities", (float*)this->light_command.light_intensities, n);
+	shader->setUniform3Array("u_light_positions", (float*)this->light_command.light_positions, n);
+	shader->setUniform3Array("u_light_colors", (float*)this->light_command.light_colors, n);
+	shader->setUniform3Array("u_light_directions", (float*)this->light_command.light_directions, n);
+	shader->setUniform1Array("u_light_cos_angle_min", (float*)this->light_command.light_cos_angle_min, n);
+	shader->setUniform1Array("u_light_cos_angle_max", (float*)this->light_command.light_cos_angle_max, n);
 
 	// Upload model matrix
 	shader->setUniform("u_model", model);
@@ -288,7 +297,7 @@ void Renderer::renderMeshWithMaterial(const Matrix44 model, GFX::Mesh* mesh, SCN
 	shader->setUniform("u_camera_position", camera->eye);
 
 	// Upload time, for cool shader effects
-	float time = getTime();
+	float time = (float)getTime();
 	shader->setUniform("u_time", time);
 
 	// Render just the verticies as a wireframe
@@ -306,55 +315,72 @@ void Renderer::renderMeshWithMaterial(const Matrix44 model, GFX::Mesh* mesh, SCN
 	glPolygonMode( GL_FRONT_AND_BACK, GL_FILL );
 }
 
-//to render shadows (lab 3)
-void Renderer::renderShadows(LightEntity *light) 
+void Renderer::renderPlain(GFX::FBO* shadow_FBO, Camera* light_camera, const Matrix44 model, GFX::Mesh* mesh) const
 {
-	// Create the shadow frame buffer object
-	GFX::FBO* shadow_FBO = new GFX::FBO();
-	shadow_FBO->setDepthOnly(1024, 1024);
+	if (!mesh || !mesh->getNumVertices() || !light_camera)
+		return;
 
-	GFX::Shader* shader = new GFX::Shader();
+	assert(glGetError() == GL_NO_ERROR);
+	
+	GFX::Shader* shader = nullptr;
+	
+	glEnable(GL_DEPTH_TEST);
+	shader = GFX::Shader::Get("plain");
+	assert(glGetError() == GL_NO_ERROR);
 	if (!shader)
 		return;
+	
 	shader->enable();
+	shader->setUniform("u_viewprojection", light_camera->viewprojection_matrix);
+	shader->setUniform("u_camera_position", light_camera->eye);
+	shader->setUniform("u_model", model);
+	shader->setTexture("u_shadowmap", shadow_FBO->depth_texture, 2);
+	
+	if (this->render_wireframe)
+		glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+	
+	mesh->render(GL_TRIANGLES);
+	shader->disable();
+	
+	glDisable(GL_BLEND);
+	glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+}
 
-	// Rendering
+//to render shadows (lab 3)
+void Renderer::renderShadows(LightEntity* light, GFX::FBO* shadow_FBO) 
+{
+	//Create the shadow frame buffer object
 	shadow_FBO->bind();
 
 	glColorMask(false, false, false, false);
 	glClear(GL_DEPTH_BUFFER_BIT);
 
 	// Configure the light camera
-	Camera* light_camera = new Camera();
+	Camera light_camera;
 
 	mat4 light_model = light->root.getGlobalMatrix();
 	vec3 light_position = light_model.getTranslation();
 	vec3 light_center = light_model * vec3(0.0f, 0.0f, -1.0f);
 	vec3 light_up = vec3(0.0f, 1.0f, 0.0f);
 
-	light_camera->lookAt(light_position, light_center, light_up);
+	light_camera.lookAt(light_position, light_center, light_up);
 
 	float half_size = light->area / 2.0f;
 	float near_plane = light->near_distance;
 	float far_plane = light->max_distance;
 
-	light_camera->setOrthographic(-half_size, half_size,
+	light_camera.setOrthographic(-half_size, half_size,
 		-half_size, half_size, near_plane, far_plane);
 
 	// Render the meshes with the point of view of the light camera
 	for (sDrawCommand& draw_command : this->draw_command_opaque_list) {
-		this->renderMeshWithMaterial(draw_command.model,
-			draw_command.mesh, draw_command.material);
+		this->renderPlain(shadow_FBO, &light_camera, draw_command.model, draw_command.mesh);
 	}
-
-	shader->setTexture("u_shadows", shadow_FBO->depth_texture, 2);
 
 	// Check parameters of the orthographic first!
 	glColorMask(true, true, true, true);
 
 	shadow_FBO->unbind();
-
-	delete[] shadow_FBO;
 }
 
 #ifndef SKIP_IMGUI
