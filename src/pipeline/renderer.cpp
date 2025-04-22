@@ -332,7 +332,6 @@ void Renderer::renderMeshWithMaterial(const Matrix44 model, GFX::Mesh* mesh, SCN
 	shader->setUniform1Array("u_light_cos_angle_min", (float*)light_cos_angle_min, num_lights);
 	shader->setUniform1Array("u_light_cos_angle_max", (float*)light_cos_angle_max, num_lights);
 
-	shader->setUniform("u_shadowmap", shadow_fbo->depth_texture, 2);
 	if (shadow_fbo && shadow_fbo->depth_texture) {
 		shader->setUniform("u_shadowmap", shadow_fbo->depth_texture, 2);
 		shader->setUniform("u_shadowvp", light_camera.viewprojection_matrix);
