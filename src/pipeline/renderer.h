@@ -50,16 +50,21 @@ namespace SCN {
 		bool render_boundaries;
 		GFX::Texture* skybox_cubemap;
 		SCN::Scene* scene;
+
 		std::vector<SCN::PrefabEntity*> prefab_list; //lab 1
-		std::vector<SCN::LightEntity*> light_list; //lab 2
 		std::vector<SCN::sDrawCommand> draw_command_opaque_list; //lab 1
 		std::vector<SCN::sDrawCommand> draw_command_transparent_list;//lab 1
-		SCN::sLightCommand light_command; //lab 2
-		//std::vector<GFX::FBO*> shadow_FBOs; //lab 3
-		GFX::FBO* shadow_fbo;
-		GFX::Texture* texture;
 
-		//updated every frame
+		std::vector<SCN::LightEntity*> light_list; //lab 2
+		SCN::sLightCommand light_command; //lab 2
+		
+		std::vector<GFX::FBO*> shadow_FBOs; //lab 3
+		std::vector<Camera*> light_cameras; //lab 3
+		std::vector<Camera*> camera_light_list;
+
+		GFX::FBO* shadow_fbo; //lab 3
+	
+		//updated every frames
 		Renderer(const char* shaders_atlas_filename);
 
 		//just to be sure we have everything ready for the rendering
@@ -68,9 +73,13 @@ namespace SCN {
 		//initialises the draw command lists for one entity
 		void parseNode(SCN::Node* node, Camera* cam);
 
+		//initialises the draw commands for all entities
+		void parsePrefabs(std::vector<SCN::PrefabEntity*> prefab_list, Camera* camera);
+
+		//initialises the light command for all entities
 		void parseLights(std::vector<SCN::LightEntity*> light_list, SCN::Scene* scene);
 
-		void parsePrefabs(std::vector<SCN::PrefabEntity*> prefab_list, Camera* camera);
+		void parseCameraLights(std::vector<SCN::LightEntity*> light_list);
 
 		//initialises the draw command and lights lists for all entities
 		void parseSceneEntities(SCN::Scene* scene, Camera* camera);
@@ -84,11 +93,11 @@ namespace SCN {
 		//to render one mesh given its material and transformation matrix
 		void renderMeshWithMaterial(const Matrix44 model, GFX::Mesh* mesh, SCN::Material* material) const;
 
-		//void renderPlain(GFX::FBO* shadow_FBO, Camera* camera, const Matrix44 model, GFX::Mesh* mesh) const;
-
 		//render the shadows given a light and an FBO
-		void renderShadows(LightEntity* light, GFX::FBO* shadow_FBO);
+		//void renderShadows(LightEntity* light, GFX::FBO* shadow_FBO);
+		void renderShadows(Camera* light_camera, GFX::FBO* shadow_fbo);
 
+		//render the an entity from the point of view of the light camera
 		void renderPlain(Camera* camera, const Matrix44 model, GFX::Mesh* mesh, SCN::Material* material);
 
 		void showUI();

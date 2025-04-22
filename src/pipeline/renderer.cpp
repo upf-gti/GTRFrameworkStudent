@@ -30,11 +30,14 @@ Renderer::Renderer(const char* shader_atlas_filename)
 	this->scene = nullptr;
 	this->skybox_cubemap = nullptr;
 
-	/*for (int i = 0; i < MAX_NUM_LIGHTS; i++) {
+	//this->shadow_fbo = new GFX::FBO();
+	//this->shadow_fbo->setDepthOnly(1024, 1024);
+
+	for (int i = 0; i < MAX_NUM_LIGHTS; i++) {
 		GFX::FBO* shadow_FBO = new GFX::FBO();
 		shadow_FBO->setDepthOnly(1024, 1024);
 		this->shadow_FBOs.push_back(shadow_FBO);
-	}*/
+	}
 
 	if (!GFX::Shader::LoadAtlas(shader_atlas_filename))
 		exit(1);
@@ -42,11 +45,6 @@ Renderer::Renderer(const char* shader_atlas_filename)
 
 	sphere.createSphere(1.0f);
 	sphere.uploadToVRAM();
-
-	texture = new GFX::Texture(1024, 1024);
-	shadow_fbo = new GFX::FBO();
-	shadow_fbo->setTexture(texture);
-	shadow_fbo->setDepthOnly(1024, 1024);
 }
 
 void Renderer::setupScene()
@@ -61,7 +59,6 @@ void Renderer::setupScene()
 }
 
 
-//store Children Prefab Entities
 void Renderer::parseNode(SCN::Node* node, Camera* cam)
 {
 	if (!node) {
@@ -82,6 +79,7 @@ void Renderer::parseNode(SCN::Node* node, Camera* cam)
 		}
 	}
 
+	// Store Children Prefab Entities
 	for (SCN::Node* child : node->children) {
 		this->parseNode(child, cam);
 	}
@@ -121,6 +119,38 @@ void Renderer::parseLights(std::vector<SCN::LightEntity*> light_list, SCN::Scene
 	}
 }
 
+void Renderer::parseCameraLights(std::vector<SCN::LightEntity*> light_list)
+{
+	this->camera_light_list.clear();
+
+	for (LightEntity* light : light_list) {
+		Camera* light_camera = new Camera();
+
+		mat4 light_model = light->root.getGlobalMatrix();
+		vec3 light_position = light_model.getTranslation();
+		vec3 light_center = light_model * vec3(0.0f, 0.0f, -1.0f);
+		vec3 light_up = vec3(0.0f, 1.0f, 0.0f);
+
+		light_camera->lookAt(light_position, light_center, light_up);
+
+		float half_size = light->area / 2.0f;
+		float near_plane = light->near_distance;
+		float far_plane = light->max_distance;
+
+		if (light->light_type == eLightType::DIRECTIONAL) {
+			light_camera->setOrthographic(-half_size, half_size, -half_size, half_size, near_plane, far_plane);
+		}
+		else if (light->light_type == eLightType::SPOT) {
+			light_camera->setPerspective(2.0f * light->cone_info.y, 1.0f, near_plane, far_plane);
+		}
+		else {
+			continue;
+		}
+
+		this->camera_light_list.push_back(light_camera);
+	}
+}
+
 
 // HERE =====================
 // TODO: GENERATE RENDERABLES
@@ -147,8 +177,9 @@ void Renderer::parseSceneEntities(SCN::Scene* scene, Camera* camera)
 		}
 	}
 
-	this->parseLights(light_list, scene);
-	this->parsePrefabs(prefab_list, camera);
+	this->parseCameraLights(this->light_list);
+	this->parseLights(this->light_list, scene);
+	this->parsePrefabs(this->prefab_list, camera);
 }
 
 // HERE =====================
@@ -159,15 +190,17 @@ void Renderer::parseSceneEntities(SCN::Scene* scene, Camera* camera)
 // ==========================
 void Renderer::renderScene(SCN::Scene* scene, Camera* camera)
 {
+	this->light_cameras.clear();
 	this->scene = scene;
 	this->setupScene();
 	this->parseSceneEntities(scene, camera);
 
-	for (LightEntity* light : this->light_list) {
-		if ((light->light_type == eLightType::DIRECTIONAL) or (light->light_type == eLightType::SPOT)) {
-			this->renderShadows(light, shadow_fbo);
-		}
+	for (int i = 0; i < this->camera_light_list.size(); i++) {
+		Camera* camera_light = this->camera_light_list.at(i);
+		GFX::FBO* shadow_fbo = this->shadow_FBOs.at(i);
+		this->renderShadows(camera_light, shadow_fbo);
 	}
+	
 	// Set the clear color (the background color)
 	glClearColor(scene->background_color.x, scene->background_color.y, scene->background_color.z, 1.0);
 
@@ -195,13 +228,6 @@ void Renderer::renderScene(SCN::Scene* scene, Camera* camera)
 			float distB = (camera->eye - b.model.getTranslation()).length();
 			return distA > distB; // Farthest first
 		});
-
-	/////////////////////////////////////////
-	// TODO: Render shadows
-	//for (int i = 0; i < this->light_command.num_lights; i++) {
-	//	this->renderShadows(this->light_list.at(i), this->shadow_FBOs.at(i));
-	//}
-	/////////////////////////////////////////
 
 	// Render opaque entities
 	for (sDrawCommand draw_command : this->draw_command_opaque_list) {
@@ -301,7 +327,20 @@ void Renderer::renderMeshWithMaterial(const Matrix44 model, GFX::Mesh* mesh, SCN
 	shader->setUniform1Array("u_light_cos_angle_min", (float*)this->light_command.light_cos_angle_min, n);
 	shader->setUniform1Array("u_light_cos_angle_max", (float*)this->light_command.light_cos_angle_max, n);
 
-	shader->setUniform("u_shadowmap", this->shadow_fbo->depth_texture, 2);
+	// Sending the shadowmap (not finished)
+
+	shader->setUniform("u_num_camera_lights", (int)this->camera_light_list.size());
+	shader->setUniform("u_shadow_map", this->shadow_FBOs.at(1)->depth_texture, 2);
+	shader->setUniform("u_shadow_vp", this->camera_light_list.at(1)->viewprojection_matrix);
+	shader->setUniform("u_shadow_bias", 0.005f);
+
+	//for (int i = 0; i < this->camera_light_list.size(); i++) {
+	//	std::cout << this->camera_light_list.size() << std::endl;
+	//	shader->setUniform("u_num_camera_lights", (int)this->camera_light_list.size());
+	//	shader->setUniform(("u_shadow_maps[" + std::to_string(i) + "]").c_str(), this->shadow_FBOs.at(i)->depth_texture, i + 2);
+	//	shader->setUniform(("u_shadow_vps[" + std::to_string(i) + "]").c_str(), this->camera_light_list.at(i)->viewprojection_matrix);
+	//	shader->setUniform(("u_shadow_biases[" + std::to_string(i) + "]").c_str(), 0.005f);
+	//}
 
 	// Upload model matrix
 	shader->setUniform("u_model", model);
@@ -330,7 +369,7 @@ void Renderer::renderMeshWithMaterial(const Matrix44 model, GFX::Mesh* mesh, SCN
 }
 
 //to render shadows (lab 3)
-void Renderer::renderShadows(LightEntity* light, GFX::FBO* shadow_fbo) 
+void Renderer::renderShadows(Camera* light_camera, GFX::FBO* shadow_fbo) 
 {
 	//Create the shadow frame buffer object
 	shadow_fbo->bind();
@@ -338,30 +377,9 @@ void Renderer::renderShadows(LightEntity* light, GFX::FBO* shadow_fbo)
 	glColorMask(false, false, false, false);
 	glClear(GL_DEPTH_BUFFER_BIT);
 
-	// Configure the light camera
-	Camera light_camera;
-
-	mat4 light_model = light->root.getGlobalMatrix();
-	vec3 light_position = light_model.getTranslation();
-	vec3 light_center = light_model * vec3(0.0f, 0.0f, -1.0f);
-	vec3 light_up = vec3(0.0f, 1.0f, 0.0f);
-
-	light_camera.lookAt(light_position, light_center, light_up);
-
-	float half_size = light->area / 2.0f;
-	float near_plane = light->near_distance;
-	float far_plane = light->max_distance;
-
-	if (light->light_type == eLightType::DIRECTIONAL) {
-		light_camera.setOrthographic(-half_size, half_size, -half_size, half_size, near_plane, far_plane);
-	}
-	else if (light->light_type == eLightType::SPOT) {
-		light_camera.setPerspective(2.0f * light->cone_info.y, 1.0f, near_plane, far_plane);
-	}
-
 	//Render the meshes with the point of view of the light camera
 	for (sDrawCommand& draw_command : this->draw_command_opaque_list) {
-		this->renderPlain(&light_camera, draw_command.model, draw_command.mesh, draw_command.material);
+		this->renderPlain(light_camera, draw_command.model, draw_command.mesh, draw_command.material);
 	}
 
 	//Check parameters of the orthographic first!
@@ -372,7 +390,7 @@ void Renderer::renderShadows(LightEntity* light, GFX::FBO* shadow_fbo)
 
 void Renderer::renderPlain(Camera* camera, const Matrix44 model, GFX::Mesh* mesh, SCN::Material* material)
 {
-	if (!mesh || !mesh->getNumVertices() || !material)
+	if (!mesh || !mesh->getNumVertices() || !material || !camera)
 		return;
 	assert(glGetError() == GL_NO_ERROR);
 
@@ -381,8 +399,9 @@ void Renderer::renderPlain(Camera* camera, const Matrix44 model, GFX::Mesh* mesh
 
 	//use plain shader
 	shader = GFX::Shader::Get("plain");
-	glEnable(GL_CULL_FACE);
-	glFrontFace(GL_CW);
+
+	//glEnable(GL_CULL_FACE);
+	//glFrontFace(GL_CW);
 
 	assert(glGetError() == GL_NO_ERROR);
 
@@ -400,8 +419,8 @@ void Renderer::renderPlain(Camera* camera, const Matrix44 model, GFX::Mesh* mesh
 
 	shader->disable();
 
-	glDisable(GL_CULL_FACE);
-	glFrontFace(GL_CCW);
+	//glDisable(GL_CULL_FACE);
+	//glFrontFace(GL_CCW);
 
 	glDisable(GL_BLEND);
 	glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
