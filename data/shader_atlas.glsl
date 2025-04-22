@@ -115,6 +115,8 @@ uniform vec3 u_light_directions[10];		// Spotlight direction (D)
 uniform float u_light_cos_angle_max[10];	// cos(alpha_max)
 uniform float u_light_cos_angle_min[10];	// cos(alpha_min)
 
+uniform sampler2D u_shadowmap;
+
 out vec4 FragColor;
 
 void main()

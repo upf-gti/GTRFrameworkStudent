@@ -283,6 +283,8 @@ void Renderer::renderMeshWithMaterial(const Matrix44 model, GFX::Mesh* mesh, SCN
 	shader->setUniform1Array("u_light_cos_angle_min", (float*)light_cos_angle_min, num_lights);
 	shader->setUniform1Array("u_light_cos_angle_max", (float*)light_cos_angle_max, num_lights);
 
+	shader->setUniform("u_shadowmap", shadow_fbo->depth_texture, 2);
+
 	// Upload model matrix
 	shader->setUniform("u_model", model);
 
@@ -375,10 +377,6 @@ void Renderer::renderPlain(Camera cam, const Matrix44 model, GFX::Mesh* mesh, SC
 
 	shader->setUniform("u_viewprojection", cam.viewprojection_matrix);
 	shader->setUniform("u_camera_position", cam.eye);
-
-	float t = getTime();
-	shader->setUniform("u_time", t);
-
 
 	mesh->render(GL_TRIANGLES);
 
