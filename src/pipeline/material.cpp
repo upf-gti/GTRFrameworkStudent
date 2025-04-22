@@ -102,18 +102,22 @@ void Material::bind(GFX::Shader* shader) {
 
 		}
 
+		// Set material color uniform
 		shader->setUniform("u_color", color);
 
+		// Bind the albedo texture to the shader (unit 0)
 		if (texture) {
 			shader->setUniform("u_texture", texture, 0);
 		}
+		// Bind the normal map texture to the shader (unit 1)
 		if (normal_map) {
 			shader->setUniform("u_texture_normal", normal_map, 1);
 		}
 
-		// This is used to say which is the alpha threshold to what we should not paint a pixel on the screen (to cut polygons according to texture alpha)
+		// Set the alpha cutoff value based on alpha mode
 		shader->setUniform("u_alpha_cutoff", alpha_mode == SCN::eAlphaMode::MASK ? alpha_cutoff : 0.001f);
 
+		// Set the shininess uniform for material specularity
 		shader->setUniform("u_shininess", shininess);
 	}
 }
