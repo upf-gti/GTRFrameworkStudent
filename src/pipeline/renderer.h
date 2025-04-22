@@ -58,6 +58,7 @@ namespace SCN {
 		//std::vector<GFX::FBO*> shadow_FBOs; //lab 3
 		GFX::FBO* shadow_fbo;
 		GFX::Texture* texture;
+		GFX::FBO* shadow_fbo;
 
 		//updated every frame
 		Renderer(const char* shaders_atlas_filename);
@@ -82,7 +83,7 @@ namespace SCN {
 		void renderSkybox(GFX::Texture* cubemap) const;
 
 		//to render one mesh given its material and transformation matrix
-		void renderMeshWithMaterial(const Matrix44 model, GFX::Mesh* mesh, SCN::Material* material) const;
+		void renderMeshWithMaterial(const Matrix44 model, GFX::Mesh* mesh, SCN::Material* material,  Camera light_camera) const;
 
 		//void renderPlain(GFX::FBO* shadow_FBO, Camera* camera, const Matrix44 model, GFX::Mesh* mesh) const;
 
