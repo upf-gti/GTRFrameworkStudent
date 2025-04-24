@@ -190,7 +190,6 @@ void Renderer::parseSceneEntities(SCN::Scene* scene, Camera* camera)
 // ==========================
 void Renderer::renderScene(SCN::Scene* scene, Camera* camera)
 {
-	this->light_cameras.clear();
 	this->scene = scene;
 	this->setupScene();
 	this->parseSceneEntities(scene, camera);
@@ -288,7 +287,7 @@ void Renderer::renderSkybox(GFX::Texture* cubemap) const
 }
 
 // Renders a mesh given its transform and material
-void Renderer::renderMeshWithMaterial(const Matrix44 model, GFX::Mesh* mesh, SCN::Material* material)
+void Renderer::renderMeshWithMaterial(const Matrix44 model, GFX::Mesh* mesh, SCN::Material* material) const
 {
 	//in case there is nothing to do
 	if (!mesh || !mesh->getNumVertices() || !material)
@@ -313,31 +312,37 @@ void Renderer::renderMeshWithMaterial(const Matrix44 model, GFX::Mesh* mesh, SCN
 
 	material->bind(shader);
 
-	// Sending the lights
-	int num_lights = min(MAX_NUM_LIGHTS, this->lights_list.size());
-	vec3 light_ambient = this->scene->ambient_light;
-	vec3 light_positions[MAX_NUM_LIGHTS];
-	vec3 light_colors[MAX_NUM_LIGHTS];
-	vec3 light_directions[MAX_NUM_LIGHTS];
-	float light_intensities[MAX_NUM_LIGHTS] = { 0.0f };
-	float light_cos_angle_max[MAX_NUM_LIGHTS] = { 0.0f };
-	float light_cos_angle_min[MAX_NUM_LIGHTS] = { 0.0f };
-	int light_types[MAX_NUM_LIGHTS] = { 0 };
+	const int n = (int)this->light_command.num_lights;
+	shader->setUniform("u_num_lights", this->light_command.num_lights);
+	shader->setUniform("u_shininess", material->shininess);
+	shader->setUniform("u_light_ambient", this->light_command.light_ambient);
+	shader->setUniform3Array("u_light_positions", (float*)this->light_command.light_positions, n);
+	shader->setUniform3Array("u_light_colors", (float*)this->light_command.light_colors, n);
+	shader->setUniform3Array("u_light_directions", (float*)this->light_command.light_directions, n);
+	shader->setUniform1Array("u_light_types", (int*)this->light_command.light_types, n);
+	shader->setUniform1Array("u_light_cos_angle_max", (float*)this->light_command.light_cos_angle_max, n);
+	shader->setUniform1Array("u_light_cos_angle_min", (float*)this->light_command.light_cos_angle_min, n);
+	shader->setUniform1Array("u_light_intensities", (float*)this->light_command.light_intensities, n);
+	
+	
+	// Sending the shadowmap +
+	const int m = (int)this->camera_light_list.size();
+	float shadow_bias[MAX_NUM_LIGHTS] = { 0 };
+	Matrix44 view_projections[MAX_NUM_LIGHTS];
+	GFX::Texture* depth_textures[MAX_NUM_LIGHTS] = { nullptr };
 
-	// Sending the shadowmap (not finished)
+	for (int i = 0; i < m; i++) {
+		depth_textures[i] = this->shadow_FBOs.at(m - 1)->depth_texture; //with m - 1, we every time take the directional light texture
+		view_projections[i] = this->camera_light_list.at(m - 1)->viewprojection_matrix;
+		shadow_bias[i] = 0.005f;
+	}
 
-	shader->setUniform("u_num_camera_lights", (int)this->camera_light_list.size());
-	shader->setUniform("u_shadow_map", this->shadow_FBOs.at(1)->depth_texture, 2);
-	shader->setUniform("u_shadow_vp", this->camera_light_list.at(1)->viewprojection_matrix);
-	shader->setUniform("u_shadow_bias", 0.005f);
-
-	//for (int i = 0; i < this->camera_light_list.size(); i++) {
-	//	std::cout << this->camera_light_list.size() << std::endl;
-	//	shader->setUniform("u_num_camera_lights", (int)this->camera_light_list.size());
-	//	shader->setUniform(("u_shadow_maps[" + std::to_string(i) + "]").c_str(), this->shadow_FBOs.at(i)->depth_texture, i + 2);
-	//	shader->setUniform(("u_shadow_vps[" + std::to_string(i) + "]").c_str(), this->camera_light_list.at(i)->viewprojection_matrix);
-	//	shader->setUniform(("u_shadow_biases[" + std::to_string(i) + "]").c_str(), 0.005f);
-	//}
+	shader->setUniform("u_num_camera_lights", m);
+	for (int i = 0; i < m; i++) {
+		shader->setUniform(("u_shadow_map[" + std::to_string(i) + "]").c_str(), depth_textures[i], i + 2);
+	}
+	shader->setMatrix44Array("u_shadow_vp", view_projections, m);
+	shader->setUniform1Array("u_shadow_bias", shadow_bias, m);
 
 	// Upload model matrix
 	shader->setUniform("u_model", model);
@@ -407,8 +412,8 @@ void Renderer::renderPlain(Camera* camera, const Matrix44 model, GFX::Mesh* mesh
 	shader->enable();
 
 	material->bind(shader);
-	shader->setUniform("u_model", model);
 
+	shader->setUniform("u_model", model);
 	shader->setUniform("u_viewprojection", camera->viewprojection_matrix);
 	shader->setUniform("u_camera_position", camera->eye);
 

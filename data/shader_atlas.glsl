@@ -116,25 +116,24 @@ uniform float u_light_cos_angle_max[10];	// cos(alpha_max)
 uniform float u_light_cos_angle_min[10];	// cos(alpha_min)
 
 uniform int u_num_camera_lights;
-uniform sampler2D u_shadow_map;         //s[10];
-uniform mat4 u_shadow_vp;                // s[10];
-uniform float u_shadow_bias;             // es[10];
+uniform sampler2D u_shadow_map[10];          
+uniform mat4 u_shadow_vp[10];               
+uniform float u_shadow_bias[10];             
 
 out vec4 FragColor;
 
-float computeShadow(vec3 world_pos) {                                         //, sampler2D u_shadow_map, mat4 u_shadow_vp, float u_shadow_bias) {
-    vec4 light_space_pos = u_shadow_vp * vec4(world_pos, 1.0);
+float computeShadow(vec3 world_pos, int shadow_num) {                    
+    vec4 light_space_pos = u_shadow_vp[shadow_num] * vec4(world_pos, 1.0);
     vec3 proj_coords = light_space_pos.xyz / light_space_pos.w;
     proj_coords = proj_coords * 0.5 + 0.5;
 
     if (proj_coords.x < 0.0 || proj_coords.x > 1.0 || proj_coords.y < 0.0 || proj_coords.y > 1.0)
         return 0.0;
 
-    float closest_depth = texture(u_shadow_map, proj_coords.xy).r;
+    float closest_depth = texture(u_shadow_map[shadow_num], proj_coords.xy).x;
     float current_depth = proj_coords.z;
-    return (current_depth - u_shadow_bias) > closest_depth ? 1.0 : 0.0;
+    return (current_depth - u_shadow_bias[shadow_num]) > closest_depth ? 0.0 : 1.0;
 }
-
 
 void main()
 {
@@ -147,20 +146,19 @@ void main()
 	vec3 specular_component = vec3(0.0);
 
 	float shadow = 0.0;
-	                                          //int j = 0; //num_camera_lights
+	int shadow_num = 0;
 
 	for(int i = 0; i < u_num_lights; i++) 
 	{
-		                                            //j = min(j, u_num_camera_lights);
+		vec3 light_position;
+		float attenuation;
+		shadow = 1.0;
 
 		if (u_light_types[i] == 0)
 		{
 			//NO LIGHT
 			continue;
 		}
-		
-		vec3 light_position;
-		float attenuation;
 
 		if (u_light_types[i] == 1)
 		{	
@@ -170,7 +168,7 @@ void main()
 			attenuation = 1.0 / max(pow(distance, 2), 0.00001);
 		} 
 
-		else if (u_light_types[i] == 2)
+		if (u_light_types[i] == 2)
 		{  
 			//SPOTLIGHT
 			light_position = u_light_positions[i] - v_world_position;
@@ -190,23 +188,18 @@ void main()
 				angular_attenuation = 1 - clamp((dot(L, D) - cos_min) / min(cos_max - cos_min, -0.00001), 0.0, 1.0);
 			} 
 			attenuation *= angular_attenuation;
-			//shadow = computeShadow(v_world_position); //, u_shadow_maps[j], u_shadow_vps[j], u_shadow_biases[j]);
-			//j++;
+			//shadow = computeShadow(v_world_position, shadow_num); 
+			//shadow_num++;
 		}
 
-		else if (u_light_types[i] == 3 )
+		if (u_light_types[i] == 3)
 		{	 
 			//DIRECTIONAL
 			light_position = u_light_positions[i];
 			attenuation = 1.0;
-			shadow = computeShadow(v_world_position); //, u_shadow_maps[j], u_shadow_vps[j], u_shadow_biases[j]);
-			//j++;
+			shadow = computeShadow(v_world_position, shadow_num);
+			//shadow_num++;
 		}
-
-		// Skip light contribution if in shadow (only for directional and spot lights)
-        if ((u_light_types[i] == 3 || u_light_types[i] == 2) && shadow > 0.5) {
-            continue;
-        }
 
 		light_position = normalize(light_position);
 		vec3 view_position = normalize(u_camera_position - v_world_position);
@@ -217,8 +210,8 @@ void main()
 		float L_dot_N = clamp(dot(normal_direction, light_position), 0.0, 1.0);
 		float R_dot_V = clamp(dot(reflection_direction, view_position), 0.0, 1.0);
 
-		diffuse_component += light_color * L_dot_N;
-		specular_component += light_color * pow(R_dot_V, u_shininess);
+		diffuse_component += shadow * light_color * L_dot_N;
+		specular_component += shadow * light_color * pow(R_dot_V, u_shininess);
 	}
 
 	if(color.a < u_alpha_cutoff)
