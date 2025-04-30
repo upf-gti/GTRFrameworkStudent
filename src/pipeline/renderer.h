@@ -30,16 +30,23 @@ namespace SCN {
 
 	struct sLightCommand {
 		int num_lights;
-		vec3 light_ambient;
-		vec3 light_positions[MAX_NUM_LIGHTS];
-		vec3 light_colors[MAX_NUM_LIGHTS];
-		vec3 light_directions[MAX_NUM_LIGHTS];
-		float light_intensities[MAX_NUM_LIGHTS] = { 0.0f };
-		float light_cos_angle_max[MAX_NUM_LIGHTS] = { 0.0f };
-		float light_cos_angle_min[MAX_NUM_LIGHTS] = { 0.0f };
-		int light_types[MAX_NUM_LIGHTS] = { 0 };
+		vec3 ambient;
+		vec3 positions[MAX_NUM_LIGHTS];
+		vec3 colors[MAX_NUM_LIGHTS];
+		vec3 directions[MAX_NUM_LIGHTS];
+		float intensities[MAX_NUM_LIGHTS] = { 0.0f };
+		float cos_angle_max[MAX_NUM_LIGHTS] = { 0.0f };
+		float cos_angle_min[MAX_NUM_LIGHTS] = { 0.0f };
+		int types[MAX_NUM_LIGHTS] = { 0 };
 	};
 
+	struct sShadowCommand {
+		int num_shadows;
+		int slots[MAX_NUM_LIGHTS] = { 0 };
+		float biases[MAX_NUM_LIGHTS] = { 0 };
+		Matrix44 view_projections[MAX_NUM_LIGHTS];
+		GFX::Texture* depth_textures[MAX_NUM_LIGHTS] = { nullptr };
+	};
 
 	//this class is in charge of rendering anything in our system.
 	//separating the render from anything else makes the code cleaner
@@ -60,6 +67,7 @@ namespace SCN {
 		
 		std::vector<GFX::FBO*> shadow_FBOs; //lab 3
 		std::vector<Camera*> camera_light_list; //lab 3
+		SCN::sShadowCommand shadow_command;
 		
 		//updated every frames
 		Renderer(const char* shaders_atlas_filename);
@@ -76,6 +84,7 @@ namespace SCN {
 		//initialises the light command for all entities
 		void parseLights(std::vector<SCN::LightEntity*> light_list, SCN::Scene* scene);
 
+		void parseShadows(std::vector<Camera*> camera_light_list);
 		void parseCameraLights(std::vector<SCN::LightEntity*> light_list);
 
 		//initialises the draw command and lights lists for all entities
@@ -97,6 +106,7 @@ namespace SCN {
 		//render the an entity from the point of view of the light camera
 		void renderPlain(Camera* camera, const Matrix44 model, GFX::Mesh* mesh, SCN::Material* material);
 
+		//to show user interface
 		void showUI();
 	};
 };

@@ -30,9 +30,6 @@ Renderer::Renderer(const char* shader_atlas_filename)
 	this->scene = nullptr;
 	this->skybox_cubemap = nullptr;
 
-	//this->shadow_fbo = new GFX::FBO();
-	//this->shadow_fbo->setDepthOnly(1024, 1024);
-
 	for (int i = 0; i < MAX_NUM_LIGHTS; i++) {
 		GFX::FBO* shadow_FBO = new GFX::FBO();
 		shadow_FBO->setDepthOnly(1024, 1024);
@@ -100,27 +97,45 @@ void Renderer::parseLights(std::vector<SCN::LightEntity*> light_list, SCN::Scene
 	this->light_command.num_lights = min(MAX_NUM_LIGHTS, (int)light_list.size());
 	int i = 0;
 	for (LightEntity* light : light_list) {
-		this->light_command.light_positions[i] = light->root.getGlobalMatrix().getTranslation();
-		this->light_command.light_intensities[i] = light->intensity;
-		this->light_command.light_types[i] = light->light_type;
-		this->light_command.light_colors[i] = light->color;
+		this->light_command.positions[i] = light->root.getGlobalMatrix().getTranslation();
+		this->light_command.intensities[i] = light->intensity;
+		this->light_command.types[i] = light->light_type;
+		this->light_command.colors[i] = light->color;
 
-		if (light->light_type == eLightType::SPOT) {
-			this->light_command.light_directions[i] = light->root.getGlobalMatrix().rotateVector(light->direction);
-			this->light_command.light_cos_angle_max[i] = light->toCos(light->getCosAngleMax());
-			this->light_command.light_cos_angle_min[i] = light->toCos(light->getCosAngleMin());
+		if (light->light_type == eLightType::DIRECTIONAL) {
+			this->light_command.directions[i] = light->root.getGlobalMatrix().frontVector();
+			this->light_command.cos_angle_max[i] = 0.0f;
+			this->light_command.cos_angle_min[i] = 0.0f;
+		}
+		else if (light->light_type == eLightType::SPOT) {
+			this->light_command.directions[i] = light->root.getGlobalMatrix().frontVector();
+			this->light_command.cos_angle_max[i] = light->toCos(light->getCosAngleMax());
+			this->light_command.cos_angle_min[i] = light->toCos(light->getCosAngleMin());
 		}
 		else {
-			this->light_command.light_directions[i] = vec3(0.0f);
-			this->light_command.light_cos_angle_min[i] = 0.0f;
-			this->light_command.light_cos_angle_max[i] = 0.0f;
+			this->light_command.directions[i] = vec3(0.0f);
+			this->light_command.cos_angle_min[i] = 0.0f;
+			this->light_command.cos_angle_max[i] = 0.0f;
 		}
 		i++;
 	}
 }
 
+void Renderer::parseShadows(std::vector<Camera*> camera_light_list) {
+	this->shadow_command.num_shadows = min(MAX_NUM_LIGHTS, (int)this->camera_light_list.size());
+	int j = 0;
+	for (Camera* light_camera : camera_light_list) {
+		this->shadow_command.slots[j] = 2 + j;
+		this->shadow_command.depth_textures[j] = this->shadow_FBOs.at(j)->depth_texture;
+		this->shadow_command.view_projections[j] = light_camera->viewprojection_matrix;
+		this->shadow_command.biases[j] = 0.005f;
+		j++;
+	}
+}
+
 void Renderer::parseCameraLights(std::vector<SCN::LightEntity*> light_list)
 {
+	for (Camera* c : this->camera_light_list) { delete c; }
 	this->camera_light_list.clear();
 
 	for (LightEntity* light : light_list) {
@@ -177,16 +192,14 @@ void Renderer::parseSceneEntities(SCN::Scene* scene, Camera* camera)
 		}
 	}
 
-	this->parseCameraLights(this->light_list);
 	this->parseLights(this->light_list, scene);
 	this->parsePrefabs(this->prefab_list, camera);
+	this->parseCameraLights(this->light_list);
+	this->parseShadows(this->camera_light_list);
 }
 
 // HERE =====================
 // TODO: RENDER RENDERABLES
-// Entities --> opaque, transparents, lights
-// Skybox
-// Shadows: per a cada llum, fbo->bind, renderitzar l'escena des del punt de vista de la c�mera-llum 
 // ==========================
 void Renderer::renderScene(SCN::Scene* scene, Camera* camera)
 {
@@ -312,50 +325,43 @@ void Renderer::renderMeshWithMaterial(const Matrix44 model, GFX::Mesh* mesh, SCN
 
 	material->bind(shader);
 
-	const int n = (int)this->light_command.num_lights;
+	//upload the lights 
+	const int n = this->light_command.num_lights;
 	shader->setUniform("u_num_lights", this->light_command.num_lights);
 	shader->setUniform("u_shininess", material->shininess);
-	shader->setUniform("u_light_ambient", this->light_command.light_ambient);
-	shader->setUniform3Array("u_light_positions", (float*)this->light_command.light_positions, n);
-	shader->setUniform3Array("u_light_colors", (float*)this->light_command.light_colors, n);
-	shader->setUniform3Array("u_light_directions", (float*)this->light_command.light_directions, n);
-	shader->setUniform1Array("u_light_types", (int*)this->light_command.light_types, n);
-	shader->setUniform1Array("u_light_cos_angle_max", (float*)this->light_command.light_cos_angle_max, n);
-	shader->setUniform1Array("u_light_cos_angle_min", (float*)this->light_command.light_cos_angle_min, n);
-	shader->setUniform1Array("u_light_intensities", (float*)this->light_command.light_intensities, n);
+	shader->setUniform("u_light_ambient", this->light_command.ambient);
+	shader->setUniform3Array("u_light_positions", (float*)this->light_command.positions, n);
+	shader->setUniform3Array("u_light_colors", (float*)this->light_command.colors, n);
+	shader->setUniform3Array("u_light_directions", (float*)this->light_command.directions, n);
+	shader->setUniform1Array("u_light_types", (int*)this->light_command.types, n);
+	shader->setUniform1Array("u_light_cos_angle_max", (float*)this->light_command.cos_angle_max, n);
+	shader->setUniform1Array("u_light_cos_angle_min", (float*)this->light_command.cos_angle_min, n);
+	shader->setUniform1Array("u_light_intensities", (float*)this->light_command.intensities, n);
 	
-	
-	// Sending the shadowmap +
-	const int m = (int)this->camera_light_list.size();
-	float shadow_bias[MAX_NUM_LIGHTS] = { 0 };
-	Matrix44 view_projections[MAX_NUM_LIGHTS];
-	GFX::Texture* depth_textures[MAX_NUM_LIGHTS] = { nullptr };
-
-	for (int i = 0; i < m; i++) {
-		depth_textures[i] = this->shadow_FBOs.at(m - 1)->depth_texture; //with m - 1, we every time take the directional light texture
-		view_projections[i] = this->camera_light_list.at(m - 1)->viewprojection_matrix;
-		shadow_bias[i] = 0.005f;
+	//upload the shadowmaps
+	const int m = this->shadow_command.num_shadows;
+	for (int j = 0; j < m; j++) {
+		glActiveTexture(GL_TEXTURE0 + this->shadow_command.slots[j]);
+		glBindTexture(GL_TEXTURE_2D, this->shadow_command.depth_textures[j]->texture_id);
 	}
 
-	shader->setUniform("u_num_camera_lights", m);
-	for (int i = 0; i < m; i++) {
-		shader->setUniform(("u_shadow_map[" + std::to_string(i) + "]").c_str(), depth_textures[i], i + 2);
-	}
-	shader->setMatrix44Array("u_shadow_vp", view_projections, m);
-	shader->setUniform1Array("u_shadow_bias", shadow_bias, m);
+	shader->setUniform("u_num_shadows", this->shadow_command.num_shadows);
+	shader->setUniform1Array("u_shadow_maps", (int*)this->shadow_command.slots, m);
+	shader->setMatrix44Array("u_shadow_vps", (Matrix44*)this->shadow_command.view_projections, m);
+	shader->setUniform1Array("u_shadow_biases", (float*)this->shadow_command.biases, m);
 
-	// Upload model matrix
+	//upload model matrix
 	shader->setUniform("u_model", model);
 
-	// Upload camera uniforms
+	//upload camera uniforms
 	shader->setUniform("u_viewprojection", camera->viewprojection_matrix);
 	shader->setUniform("u_camera_position", camera->eye);
 
-	// Upload time, for cool shader effects
+	//upload time, for cool shader effects
 	float time = getTime();
 	shader->setUniform("u_time", time);
 
-	// Render just the verticies as a wireframe
+	//render just the verticies as a wireframe
 	if (this->render_wireframe)
 		glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
 
@@ -402,9 +408,6 @@ void Renderer::renderPlain(Camera* camera, const Matrix44 model, GFX::Mesh* mesh
 	//use plain shader
 	shader = GFX::Shader::Get("plain");
 
-	//glEnable(GL_CULL_FACE);
-	//glFrontFace(GL_CW);
-
 	assert(glGetError() == GL_NO_ERROR);
 
 	if (!shader)
@@ -420,9 +423,6 @@ void Renderer::renderPlain(Camera* camera, const Matrix44 model, GFX::Mesh* mesh
 	mesh->render(GL_TRIANGLES);
 
 	shader->disable();
-
-	//glDisable(GL_CULL_FACE);
-	//glFrontFace(GL_CCW);
 
 	glDisable(GL_BLEND);
 	glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
