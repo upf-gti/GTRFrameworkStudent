@@ -128,7 +128,9 @@ void Renderer::parseShadows(std::vector<Camera*> camera_light_list) {
 		this->shadow_command.slots[j] = 2 + j;
 		this->shadow_command.depth_textures[j] = this->shadow_FBOs.at(j)->depth_texture;
 		this->shadow_command.view_projections[j] = light_camera->viewprojection_matrix;
-		this->shadow_command.biases[j] = 0.005f;
+		if ((this->shadow_command.biases[j] == 0.0f) || (this->shadow_command.biases[j] == NULL)) {
+			this->shadow_command.biases[j] = 0.005f;
+		}
 		j++;
 	}
 }
@@ -436,7 +438,24 @@ void Renderer::showUI()
 	ImGui::Checkbox("Boundaries", &this->render_boundaries);
 
 	//add here your stuff
-	//...
+	
+	// Shadow bias UI
+	static int selected_light = 0;
+	int num_lights = (int)this->shadow_command.num_shadows;
+	if (num_lights > 0) {
+		ImGui::Separator();
+		ImGui::Text("Shadow Bias Editor");
+
+		//Light selector
+		ImGui::SliderInt("Light Index", &selected_light, 0, num_lights - 1);
+
+		//Clamp selected_light to valid range in case lights change dynamically
+		selected_light = std::clamp(selected_light, 0, num_lights - 1);
+
+		//Bias slider
+		float& bias = this->shadow_command.biases[selected_light];
+		ImGui::SliderFloat("Bias", &bias, 0.0001f, 0.1f, "%.5f");
+	}
 }
 
 #else
