@@ -3,6 +3,7 @@
 #include "prefab.h"
 #include "light.h"
 #include "camera.h"
+#include "deferred.h"
 
 
 #define MAX_NUM_LIGHTS 10
@@ -48,6 +49,11 @@ namespace SCN {
 		GFX::Texture* depth_textures[MAX_NUM_LIGHTS] = { nullptr };
 	};
 
+	enum class RenderPipeline {
+		FORWARD,
+		DEFERRED
+	};
+
 	//this class is in charge of rendering anything in our system.
 	//separating the render from anything else makes the code cleaner
 	class Renderer
@@ -68,6 +74,9 @@ namespace SCN {
 		std::vector<GFX::FBO*> shadow_FBOs; //lab 3
 		std::vector<Camera*> camera_light_list; //lab 3
 		SCN::sShadowCommand shadow_command;
+
+		RenderPipeline current_pipeline = RenderPipeline::FORWARD; //default for now
+		Deferred deferred;
 		
 		//updated every frames
 		Renderer(const char* shaders_atlas_filename);
