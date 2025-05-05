@@ -44,6 +44,7 @@ public:
 	Vector3f front;
 
 	Camera();
+	//Camera(SCN::LightEntity* light);
 
 	//set as current
 	void enable();

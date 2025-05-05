@@ -5,6 +5,7 @@ skybox basic.vs skybox.fs
 depth quad.vs depth.fs
 multi basic.vs multi.fs
 compute test.cs
+plain basic.vs plain.fs
 
 \test.cs
 #version 430 core
@@ -86,6 +87,7 @@ void main()
 }
 
 
+//LAB2 lighting and LAB3 shadows
 \texture.fs
 
 #version 330 core
@@ -101,17 +103,123 @@ uniform sampler2D u_texture;
 uniform float u_time;
 uniform float u_alpha_cutoff;
 
+uniform int u_num_lights;					// Number of lights
+uniform float u_shininess;					// Coefficient of shininess
+uniform vec3 u_light_ambient;				// Ambient light (constant)
+uniform int u_light_types[10];				// Light type
+uniform vec3 u_light_positions[10];			// Light position
+uniform vec3 u_light_colors[10];			// Light color
+uniform float u_light_intensities[10];		// Light intensity
+uniform vec3 u_camera_position;				// Camera position
+uniform vec3 u_light_directions[10];		// Spotlight direction (D)
+uniform float u_light_cos_angle_max[10];	// cos(alpha_max)
+uniform float u_light_cos_angle_min[10];	// cos(alpha_min)
+
+uniform int u_num_shadows;
+uniform sampler2D u_shadow_maps[10];          
+uniform mat4 u_shadow_vps[10];               
+uniform float u_shadow_biases[10];             
+
 out vec4 FragColor;
 
+float computeShadow(int shadow_num) {                    
+    vec4 light_space_pos = u_shadow_vps[shadow_num] * vec4(v_world_position, 1.0);
+    vec3 proj_coords = light_space_pos.xyz / light_space_pos.w;
+    proj_coords = (proj_coords + 1) / 2;
+
+	bool outside_shadow = proj_coords.x < 0.0 || proj_coords.x > 1.0 || 
+							proj_coords.y < 0.0 || proj_coords.y > 1.0 ||
+							proj_coords.z < 0.0 || proj_coords.z > 1.0;
+    if (outside_shadow)
+        return 0.0;
+
+    float shadow_closest_depth = texture(u_shadow_maps[shadow_num], proj_coords.xy).x;
+    float current_depth = proj_coords.z;
+    return shadow_closest_depth < (current_depth - u_shadow_biases[shadow_num]) ? 0.0 : 1.0;
+}
 void main()
 {
 	vec2 uv = v_uv;
 	vec4 color = u_color;
 	color *= texture( u_texture, v_uv );
 
+	vec3 ambient_component = u_light_ambient;
+	vec3 diffuse_component = vec3(0.0);
+	vec3 specular_component = vec3(0.0);
+
+	float shadow = 0.0;
+	int shadow_num = 0;
+
+	for (int i = 0; i < u_num_lights; i++) 
+	{
+		vec3 light_position;
+		float attenuation;
+		shadow = 1.0;
+
+		if (u_light_types[i] == 0)
+		{
+			//NO LIGHT
+			continue;
+		}
+
+		if (u_light_types[i] == 1)
+		{	
+			//POINT
+			light_position = u_light_positions[i] - v_world_position;
+			float distance = length(light_position);
+			attenuation = 1.0 / max(pow(distance, 2), 0.00001);
+		} 
+
+		if (u_light_types[i] == 2)
+		{  
+			//SPOTLIGHT
+			light_position = u_light_positions[i] - v_world_position;
+			float distance = length(light_position);
+			attenuation = 1.0 / max(pow(distance, 2), 0.00001);
+
+			//Angular attenuation (spotlight cone)
+			vec3 L = normalize(light_position);
+			vec3 D = normalize(u_light_directions[i]); 
+
+			float cos_max = u_light_cos_angle_max[i];
+			float cos_min = u_light_cos_angle_min[i];
+			
+			float angular_attenuation = 0.0;
+			if (dot(L, D) >= cos_max)
+			{
+				angular_attenuation = clamp((dot(L, D) - cos_max) / max(cos_min - cos_max, 0.00001), 0.0, 1.0);
+			} 
+			attenuation *= angular_attenuation;
+			shadow = computeShadow(shadow_num); 
+			shadow_num++;
+		}
+
+		if (u_light_types[i] == 3)
+		{	 
+			//DIRECTIONAL
+			light_position = u_light_positions[i];
+			attenuation = 1.0;
+			shadow = computeShadow(shadow_num);
+			shadow_num++;
+		}
+
+		light_position = normalize(light_position);
+		vec3 view_position = normalize(u_camera_position - v_world_position);
+		vec3 normal_direction = normalize(v_normal);
+		vec3 reflection_direction = normalize(reflect(-light_position, normal_direction));
+		vec3 light_color =  attenuation * u_light_colors[i] * u_light_intensities[i];
+
+		float L_dot_N = clamp(dot(normal_direction, light_position), 0.0, 1.0);
+		float R_dot_V = clamp(dot(reflection_direction, view_position), 0.0, 1.0);
+
+		diffuse_component += shadow * light_color * L_dot_N;
+		specular_component += shadow * light_color * pow(R_dot_V, u_shininess);
+	}
+
 	if(color.a < u_alpha_cutoff)
 		discard;
 
+	color.xyz *= ambient_component + diffuse_component + specular_component;
 	FragColor = color;
 }
 
@@ -223,4 +331,16 @@ void main()
 
 	//calcule the position of the vertex using the matrices
 	gl_Position = u_viewprojection * vec4( v_world_position, 1.0 );
+}
+
+\plain.fs
+
+#version 330 core
+
+out vec4 FragColor;
+
+void main()
+{
+	//Some alpha testing would be good here
+	FragColor = vec4(0.0, 0.0, 0.0, 1.0);
 }

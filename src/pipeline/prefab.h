@@ -24,7 +24,7 @@ namespace SCN {
 		int prim; //triangles, points, lines
 	};
 
-	//A node represents a part of a prefab, that has a mesh, a material, and a transform matrix
+	//A node represents a part of a prefab that has a mesh, a material, and a transform matrix
 	class Node
 	{
 	public:
