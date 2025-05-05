@@ -102,9 +102,10 @@ uniform vec4 u_color;
 uniform sampler2D u_texture;
 uniform float u_time;
 uniform float u_alpha_cutoff;
+uniform mat4 u_model;
 
-out vec4 FragColor;
-
+layout(location = 0) out vec4 FragColor;
+layout(location = 1) out vec4 NormalColor;
 void main()
 {
 	vec2 uv = v_uv;
@@ -114,7 +115,10 @@ void main()
 	if(color.a < u_alpha_cutoff)
 		discard;
 
+	vec3 normal = transpose(inverse(mat3(u_model))) * v_normal;
+	normal = normalize(normal);
 	FragColor = color;
+	NormalColor = vec4(normal * 0.5 + 0.5,1.0);
 }
 
 
@@ -127,7 +131,7 @@ in vec3 v_world_position;
 
 uniform samplerCube u_texture;
 uniform vec3 u_camera_position;
-out vec4 FragColor;
+layout(location = 0) out vec4 FragColor;    // color buffer
 
 void main()
 {
@@ -297,7 +301,9 @@ uniform int    u_numShadowCasters;
 // Alpha discard
 uniform float u_alpha_cutoff;
 
-out vec4 FragColor;
+out vec4 FragColor; // Final color output
+   // color buffer
+layout(location = 1) out vec4 NormalColor;  // normal buffer
 
 void main() {
     // Get the base color
@@ -309,6 +315,8 @@ void main() {
         discard;
 
     vec3 base_color = color.rgb;
+
+	// Store base color for gFBO
 
     // Ambient term calculation
     vec3 ambient = vec3(0.0);
@@ -410,6 +418,7 @@ void main() {
 	// Final color calculation with ambient, diffuse, and specular components
 	vec3 final_color = ambient + (diffuse_total + specular_total);
     FragColor = vec4(final_color, color.a);
+	NormalColor = vec4(v_normal * 0.5 + 0.5,1.0); // Store normal in NormalColor for debugging
 }
 
 \plain.fs

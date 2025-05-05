@@ -56,6 +56,10 @@ std::vector<GFX::FBO>   shadow_FBOs;
 // Stores view-projection matrices for each light
 std::vector<Matrix44>   shadow_vps;
 
+//Assigment 4
+//Store the G-buffer FBO
+GFX::FBO gbuffer_FBO;
+
 Camera lightCam; // Assignment 3
 
 Renderer::Renderer(const char* shader_atlas_filename)
@@ -76,6 +80,14 @@ Renderer::Renderer(const char* shader_atlas_filename)
 	shadow_FBOs.resize(MAX_SHADOW_CASTERS);
 	for (auto& fbo : shadow_FBOs)
 		fbo.setDepthOnly(1024, 1024);
+
+	//Initiallize G fbo
+	gbuffer_FBO.create(1024, 768,
+		2, // Create two texture to render to
+		GL_RGBA, // Each texture has an R G B and A channels
+		GL_UNSIGNED_BYTE, // Uses 8 bits per channel
+		false); // No depth texture
+
 
 }
 
@@ -208,6 +220,8 @@ void Renderer::renderScene(SCN::Scene* scene, Camera* camera)
 
 	renderToShadowMap();// Assignment 3  3.2.2
 
+	rendertoGFBO(); // Assignment 4
+
 	//set the clear color (the background color)
 	glClearColor(scene->background_color.x, scene->background_color.y, scene->background_color.z, 1.0);
 
@@ -291,7 +305,6 @@ void Renderer::renderMeshWithMaterial(const Matrix44 model, GFX::Mesh* mesh, SCN
 
 	//chose a shader
 	shader = GFX::Shader::Get("phong");
-
 	assert(glGetError() == GL_NO_ERROR);
 
 	//no shader? then nothing to render
@@ -476,6 +489,206 @@ void Renderer::renderMeshWithMaterial(const Matrix44 model, GFX::Mesh* mesh, SCN
 	glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
 }
 
+
+//Render the scene using a quad and gFBO assigment 4
+void Renderer::renderQuadWithGFBO(const Matrix44 model, GFX::Mesh* mesh, SCN::Material* material)
+{
+	//in case there is nothing to do
+	if (!mesh || !mesh->getNumVertices() || !material)
+		return;
+	assert(glGetError() == GL_NO_ERROR);
+
+	//define locals to simplify coding
+	GFX::Shader* shader = NULL;
+	Camera* camera = Camera::current;
+
+	glEnable(GL_DEPTH_TEST);
+
+	//chose a shader
+	shader = GFX::Shader::Get("phong");
+	assert(glGetError() == GL_NO_ERROR);
+
+	//no shader? then nothing to render
+	if (!shader)
+		return;
+
+	// Activate the shader
+	shader->enable();
+
+	// Define shadow map uniforms
+	static const char* shadowNames[MAX_SHADOW_CASTERS] = {
+			"u_shadow_maps[0]",
+			"u_shadow_maps[1]",
+			"u_shadow_maps[2]",
+			"u_shadow_maps[3]"
+	};
+
+	// Determine the number of shadow casters
+	int nSh = std::min<int>(lights.size(), MAX_SHADOW_CASTERS);
+
+	// Bind material to the shader
+	material->bind(shader);
+
+	//upload uniforms
+	shader->setUniform("u_model", model);
+
+	// Upload camera uniforms
+	shader->setUniform("u_viewprojection", camera->viewprojection_matrix);
+	shader->setUniform("u_camera_position", camera->eye);
+	shader->setUniform("u_alpha_cutoff", alpha_cutoff);
+
+	// Upload time, for cool shader effects
+	float t = getTime();
+	shader->setUniform("u_time", t);
+
+	// Prepare light information
+	const int MAX_LIGHTS = 100;
+	int numLights = std::min<int>(static_cast<int>(lights.size()), MAX_LIGHTS);
+	std::vector<Vector3f> lightPositions;
+	std::vector<Vector3f> lightColors;
+	std::vector<float> lightIntensities;
+	std::vector<int> lightTypes;
+	std::vector<Vector3f> lightDirections;
+	std::vector<Vector2f> lightConeInfo;
+
+	// Collect light data
+	for (int i = 0; i < numLights; i++) {
+
+
+		SCN::LightEntity* light = lights[i];
+
+		// Process each light based on type (point, directional, spotlight)
+		int type = 0; // 0: Point, 1: Directional, 2: Spotlight
+		if (light->light_type == SCN::eLightType::DIRECTIONAL) {
+			type = 1;
+		}
+		else if (light->light_type == SCN::eLightType::SPOT) {
+			type = 2;
+		}
+
+		lightTypes.push_back(type);
+
+		// Add light data based on type
+		if (type == 0) {
+			Vector3f pos = light->root.getGlobalMatrix().getTranslation();
+			lightPositions.push_back(pos);
+			lightDirections.push_back(0);
+			lightConeInfo.push_back(Vector2f(0, 0));
+		}
+		else if (type == 1) {
+			Vector3f front = light->root.getGlobalMatrix().frontVector().normalize();
+			lightDirections.push_back(front);
+			lightPositions.push_back(0);
+			lightConeInfo.push_back(Vector2f(0, 0));
+		}
+		else if (type == 2) {
+			Vector3f pos = light->root.getGlobalMatrix().getTranslation();
+			Vector3f dir = light->root.getGlobalMatrix().frontVector().normalize();
+
+			lightPositions.push_back(pos);
+			lightDirections.push_back(dir);
+
+			float alpha_min = DEG2RAD * light->cone_info.x;
+			float alpha_max = DEG2RAD * light->cone_info.y;
+			lightConeInfo.push_back(Vector2f(alpha_min, alpha_max));
+		}
+
+		// Store light color and intensity
+		lightColors.push_back(light->color);
+		lightIntensities.push_back(light->intensity);
+	}
+
+	// Single pass rendering
+	if (!use_multipass) {
+		// We uploaded all the shadow maps at once
+		for (int i = 0; i < nSh; ++i) {
+			shader->setUniform(
+				shadowNames[i],
+				shadow_FBOs[i].depth_texture,
+				2 + i
+			);
+		}
+
+		// Upload light and shadow data
+		shader->setMatrix44Array("u_shadow_vps", shadow_vps.data(), nSh);
+		shader->setUniform("u_numShadowCasters", nSh);
+		shader->setUniform("u_shadow_bias", shadow_bias);
+		shader->setUniform("u_numLights", numLights);
+		shader->setUniform3Array("u_light_pos", reinterpret_cast<float*>(lightPositions.data()), numLights);
+		shader->setUniform3Array("u_light_color", reinterpret_cast<float*>(lightColors.data()), numLights);
+		shader->setUniform1Array("u_light_intensity", lightIntensities.data(), numLights);
+		shader->setUniform1Array("u_light_type", lightTypes.data(), numLights);
+		shader->setUniform("u_ambient_light", scene->ambient_light);
+		shader->setUniform("u_apply_ambient", 1);
+		shader->setUniform3Array("u_light_direction", reinterpret_cast<float*>(lightDirections.data()), numLights);
+		shader->setUniform2Array("u_light_cone_info", reinterpret_cast<float*>(lightConeInfo.data()), numLights);
+
+		// Render mesh
+		if (render_wireframe) glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+		mesh->render(GL_TRIANGLES);
+	}
+	// Multi-pass rendering
+	else {
+
+		// Set blending state for multi-pass rendering
+		glDepthFunc(GL_LEQUAL);
+		glBlendFunc(GL_SRC_ALPHA, GL_ONE);
+
+		// Render each light separately with its shadow maps
+		for (int i = 0; i < numLights; i++) {
+
+			bool hasShadow = (i < nSh) && (lightTypes[i] == 1 || lightTypes[i] == 2);
+
+			if (hasShadow) {
+				shader->setUniform(shadowNames[0], shadow_FBOs[i].depth_texture, 2);
+				shader->setMatrix44Array("u_shadow_vps", &shadow_vps[i], 1);
+				shader->setUniform("u_numShadowCasters", 1);
+				shader->setUniform("u_shadow_bias", shadow_bias);
+			}
+			else {
+				// no hay sombra en esta pasada
+				shader->setUniform("u_numShadowCasters", 0);
+			}
+
+			// Enable/disable blending depending on the light and apply or no ambient light
+			if (i == 0) {
+				glDisable(GL_BLEND);
+
+				shader->setUniform("u_apply_ambient", 1);
+			}
+			else {
+				glEnable(GL_BLEND);
+
+				shader->setUniform("u_apply_ambient", 0);
+			}
+
+			// Upload light data for each pass
+			shader->setUniform("u_numLights", 1);
+			shader->setUniform3Array("u_light_pos", reinterpret_cast<const float*>(&lightPositions[i]), 1);
+			shader->setUniform3Array("u_light_color", reinterpret_cast<const float*>(&lightColors[i]), 1);
+			shader->setUniform1Array("u_light_intensity", &lightIntensities[i], 1);
+			shader->setUniform1Array("u_light_type", &lightTypes[i], 1);
+			shader->setUniform("u_ambient_light", scene->ambient_light);
+			shader->setUniform3Array("u_light_direction", reinterpret_cast<const float*>(&lightDirections[i]), 1);
+			shader->setUniform2Array("u_light_cone_info", reinterpret_cast<const float*>(&lightConeInfo[i]), 1);
+
+			// Render mesh
+			if (render_wireframe) glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+			mesh->render(GL_TRIANGLES);
+		}
+
+		// Reset blending state
+		glDisable(GL_BLEND);
+		glDepthFunc(GL_LESS);
+	}
+
+	//disable shader
+	shader->disable();
+
+	//set the render state as it was before to avoid problems with future renders
+	glDisable(GL_BLEND);
+	glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+}
 #ifndef SKIP_IMGUI
 
 void Renderer::showUI()
@@ -564,6 +777,55 @@ Camera Renderer::configureLightCamera(int idx) {
 	return light_cam;
 }
 
+// Assigment 4
+void Renderer::rendertoGFBO() {
+	if (lights.empty())
+		return;
+	// Save the original OpenGL state
+	GLint old_viewport[4];
+	glGetIntegerv(GL_VIEWPORT, old_viewport);
+	GLint old_draw_buf;
+	glGetIntegerv(GL_DRAW_BUFFER, &old_draw_buf);
+
+	gbuffer_FBO.bind();
+
+	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+	for (sDrawCommand& cmd : opaqueNodes)
+		renderMeshwithTexture(cmd.model, cmd.mesh, cmd.material);
+
+	gbuffer_FBO.unbind();
+
+}
+
+void Renderer::renderMeshwithTexture(const Matrix44 model, GFX::Mesh* mesh, SCN::Material* material) {
+	//in case there is nothing to do
+	if (!mesh || !mesh->getNumVertices() || !material)
+		return;
+	assert(glGetError() == GL_NO_ERROR);
+	//define locals to simplify coding
+	GFX::Shader* shader = NULL;
+	Camera* camera = Camera::current;
+	glEnable(GL_DEPTH_TEST);
+	//chose a shader
+	shader = GFX::Shader::Get("texture");
+	assert(glGetError() == GL_NO_ERROR);
+	//no shader? then nothing to render
+	if (!shader)
+		return;
+	// Activate the shader
+	shader->enable();
+	// Bind material to the shader
+	material->bind(shader);
+	//upload uniforms
+	shader->setUniform("u_model", model);
+	// Upload camera uniforms
+	shader->setUniform("u_viewprojection", camera->viewprojection_matrix);
+	shader->setUniform("u_camera_position", camera->eye);
+	shader->setUniform("u_alpha_cutoff", alpha_cutoff);
+	mesh->render(GL_TRIANGLES);
+	shader->disable();
+}
 void Renderer::renderToShadowMap() {
 	// Return early if there are no lights
 	if (lights.empty())
@@ -636,6 +898,33 @@ void Renderer::renderPlain(const Camera& C,
 	if (!mesh || mesh->getNumVertices() == 0) return;
 
 	GFX::Shader* s = GFX::Shader::Get("plain");
+	s->enable();
+	s->setUniform("u_model", model);
+	s->setUniform("u_viewprojection", C.viewprojection_matrix);
+
+	int useMask = (mat && mat->alpha_mode == SCN::MASK &&
+		mat->textures[SCN::OPACITY].texture) ? 1 : 0;
+	s->setUniform("u_use_mask", useMask);
+	s->setUniform("u_alpha_cutoff",
+		mat ? mat->alpha_cutoff : 0.5f);
+	if (useMask) {
+		s->setUniform("u_opacity_map",
+			mat->textures[SCN::OPACITY].texture, 0);
+	}
+
+	mesh->render(GL_TRIANGLES);
+	s->disable();
+
+}
+
+void Renderer::renderTexture(const Camera& C,
+	const Matrix44& model,
+	GFX::Mesh* mesh,
+	SCN::Material* mat)
+{
+	if (!mesh || mesh->getNumVertices() == 0) return;
+
+	GFX::Shader* s = GFX::Shader::Get("texture");
 	s->enable();
 	s->setUniform("u_model", model);
 	s->setUniform("u_viewprojection", C.viewprojection_matrix);

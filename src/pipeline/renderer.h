@@ -55,16 +55,27 @@ namespace SCN {
 		//to render one mesh given its material and transformation matrix
 		void renderMeshWithMaterial(const Matrix44 model, GFX::Mesh* mesh, SCN::Material* material);
 
+		void renderQuadWithGFBO(const Matrix44 model, GFX::Mesh* mesh, SCN::Material* material);
+
+		void renderMeshwithTexture(const Matrix44 model, GFX::Mesh* mesh, SCN::Material* material);
+
 		void showShininessSliders(SCN::Node* node);//Assignment 2
 
 		Camera configureLightCamera(int index); //Assignment 3
 
 		void renderToShadowMap();  //Assignment 3
 
+		void rendertoGFBO(); //Assignment 4
+
 		void renderPlain(const Camera& lightCam,
 			const Matrix44& model,
 			GFX::Mesh* mesh,
 			SCN::Material* material); //Assignment 3
+
+		void renderTexture(const Camera& lightCam,
+			const Matrix44& model,
+			GFX::Mesh* mesh,
+			SCN::Material* material); //Assignment 4
 
 		void showUI();
 	};
