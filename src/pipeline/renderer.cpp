@@ -86,7 +86,7 @@ Renderer::Renderer(const char* shader_atlas_filename)
 		2, // Create two texture to render to
 		GL_RGBA, // Each texture has an R G B and A channels
 		GL_UNSIGNED_BYTE, // Uses 8 bits per channel
-		false); // No depth texture
+		true); // No depth texture
 
 
 }
@@ -248,6 +248,7 @@ void Renderer::renderScene(SCN::Scene* scene, Camera* camera)
 	}
 	*/
 
+
 	// Same for quad
 	for (sDrawCommand command : opaqueNodes) {
 		Renderer::renderQuadWithGFBO(command.model, command.mesh, command.material);
@@ -288,6 +289,11 @@ void Renderer::renderSkybox(GFX::Texture* cubemap)
 	// Upload camera uniforms
 	shader->setUniform("u_viewprojection", camera->viewprojection_matrix);
 	shader->setUniform("u_camera_position", camera->eye);
+
+	shader->setTexture("u_gbuffer_depth", gbuffer_FBO.depth_texture, 2);
+
+	//Send inverse size of screen
+	shader->setUniform("u_inv_screen_size", Vector2f(1.0f / gbuffer_FBO.width, 1.0f / gbuffer_FBO.height));
 
 	shader->setUniform("u_texture", cubemap, 0);
 
@@ -524,7 +530,7 @@ void Renderer::renderQuadWithGFBO(const Matrix44 model, GFX::Mesh* mesh, SCN::Ma
 		return;
 
 	//Assigmet 4 creation of quad
-	GFX::Mesh* quad = GFX::Mesh::Get("quad");
+	GFX::Mesh* quad = GFX::Mesh::getQuad();
 
 	// Activate the shader
 	shader->enable();
@@ -643,10 +649,14 @@ void Renderer::renderQuadWithGFBO(const Matrix44 model, GFX::Mesh* mesh, SCN::Ma
 		shader->setTexture("u_gbuffer_normal", gbuffer_FBO.color_textures[1], 1);
 		shader->setTexture("u_gbuffer_depth", gbuffer_FBO.depth_texture, 2);
 
+		shader->setUniform("u_sky_text", skybox_cubemap, 0);
+
+
 		//Send inverse size of screen
 		shader->setUniform("u_inv_screen_size", Vector2f(1.0f / gbuffer_FBO.width, 1.0f / gbuffer_FBO.height));
-
-
+		camera->viewprojection_matrix.inverse();
+		shader->setUniform("u_inv_viewprojection", camera->viewprojection_matrix);
+		camera->viewprojection_matrix.inverse();
 		// Render mesh
 		if (render_wireframe) glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
 		quad->render(GL_TRIANGLES);

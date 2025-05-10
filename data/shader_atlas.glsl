@@ -7,6 +7,7 @@ depth quad.vs depth.fs
 multi basic.vs multi.fs
 compute test.cs
 phong basic.vs phong.fs
+quad quad.vs quad.fs
 
 \test.cs
 #version 430 core
@@ -61,6 +62,44 @@ void main()
 
 \quad.vs
 
+#version 330 core
+
+in vec3 a_vertex;
+in vec3 a_normal;
+in vec2 a_coord;
+in vec4 a_color;
+out vec2 v_uv;
+
+
+uniform mat4 u_model;
+uniform mat4 u_viewprojection;
+
+
+//this will store the color for the pixel shader
+out vec3 v_position;
+out vec3 v_world_position;
+out vec3 v_normal;
+out vec4 v_color;
+
+uniform float u_time;
+
+void main()
+{	
+	//calcule the normal in camera space (the NormalMatrix is like ViewMatrix but without traslation)
+	v_normal = (u_model * vec4( a_normal, 0.0) ).xyz;
+	
+	//calcule the vertex in object space
+	v_position = a_vertex;
+	v_world_position = (u_model * vec4( v_position, 1.0) ).xyz;
+	
+	//store the color in the varying var to use it from the pixel shader
+	v_color = a_color;
+
+	v_uv = a_coord;
+	gl_Position = vec4( a_vertex, 1.0 );
+}
+
+\quad.fs
 #version 330 core
 
 #define MAX_LIGHTS 100
@@ -130,26 +169,34 @@ uniform int    u_numShadowCasters;
 // Alpha discard
 uniform float u_alpha_cutoff;
 
-// GFBO textures
+out vec4 FragColor; // Final color output
+
+uniform vec2 u_inv_screen_size;
+//Unifroms from gbuffer
+
 uniform sampler2D u_gbuffer_color;
 uniform sampler2D u_gbuffer_normal;
 uniform sampler2D u_gbuffer_depth;
-// Inverse of screen size
-uniform vec2 u_inv_screen_size;
 
+uniform samplerCube u_sky_text;
 
-out vec4 FragColor; // Final color output
-   // color buffer
-layout(location = 1) out vec4 NormalColor;  // normal buffer
+uniform mat4 u_inv_viewprojection;
 
 void main() {
+	//Assigment 4 getting data from gbuffer
+	vec2 uv = gl_FragCoord.xy * u_inv_screen_size; //[0,1]
+	float depth = texture(u_gbuffer_depth, uv).x;
+	float depth_clip = depth * 2.0 - 1.0; // [0,1] -> [-1,1]
 
-	//Get uv for quad
+	vec2 uv_clip = uv * 2.0 - 1.0; // [0,1] -> [-1,1]
+	vec4 clip_coords = vec4(uv_clip.x, uv_clip.y, depth_clip, 1.0);
 
-	vec2 uv = gl_FragCoord.xy * u_inv_screen_size;
+	vec4 not_norm_world_pos = u_inv_viewprojection * clip_coords;
+
+	vec3 world_pos = not_norm_world_pos.xyz / not_norm_world_pos.w;
 
     // Get the base color
-    vec4 tex_color = texture(u_texture, v_uv);
+    vec4 tex_color = texture(u_gbuffer_color, uv);
     vec4 color = tex_color * u_color;
 
 	// Discard the fragment if its alpha is below the cutoff (transparent)
@@ -171,9 +218,9 @@ void main() {
     vec3 specular_total = vec3(0.0);
 
 	// Get the perturbed normal from the normal map
-    vec3 normal_pixel = texture(u_texture_normal, v_uv).rgb;
-    vec3 N = perturbNormal(normalize(v_normal), v_world_position, v_uv, normal_pixel);
-    vec3 V = normalize(u_camera_position - v_world_position);
+    vec3 normal_pixel = texture(u_gbuffer_normal, uv).rgb;
+    vec3 N = perturbNormal(normalize(v_normal), world_pos, uv, normal_pixel);
+    vec3 V = normalize(u_camera_position - world_pos);
 
 	// Loop through all lights and calculate their contribution
     for (int i = 0; i < u_numLights; i++) {
@@ -182,7 +229,7 @@ void main() {
 
 		// Calculate shadow for shadow-casting lights
 		if (i < u_numShadowCasters) {
-            vec4 proj_pos     = u_shadow_vps[i] * vec4(v_world_position, 1.0);
+            vec4 proj_pos     = u_shadow_vps[i] * vec4(world_pos, 1.0);
             float real_depth  = (proj_pos.z - u_shadow_bias) / proj_pos.w;
             proj_pos /= proj_pos.w;
             vec2 shadow_uv    = proj_pos.xy * 0.5 + 0.5;
@@ -205,8 +252,8 @@ void main() {
 		
 		// Point light calculation
         if (u_light_type[i] == 0) {
-            L = normalize(u_light_pos[i] - v_world_position);
-            float distance = length(u_light_pos[i] - v_world_position);
+            L = normalize(u_light_pos[i] - world_pos);
+            float distance = length(u_light_pos[i] - world_pos);
             attenuation = 1.0 / (distance * distance);
         }
 		// Directional light calculation
@@ -216,8 +263,8 @@ void main() {
         }
 		// Spotlight calculation
 		else if (u_light_type[i] == 2) { // Spotlight
-  			L = normalize(u_light_pos[i] - v_world_position);
-            float distance = length(u_light_pos[i] - v_world_position);
+  			L = normalize(u_light_pos[i] - world_pos);
+            float distance = length(u_light_pos[i] - world_pos);
     
 			vec3 D = normalize(u_light_direction[i]);
 			float cos_angle = dot(L, D); 
@@ -257,11 +304,21 @@ void main() {
 			
     }
 
+	if(depth >= 1.0)
+	{
+		// This is the skybox, don't shade
+		vec3 E = world_pos - u_camera_position;
+		vec4 skybox_color = texture( u_sky_text, E );
+		FragColor = skybox_color;
+		return;
+	}
 	// Final color calculation with ambient, diffuse, and specular components
 	vec3 final_color = ambient + (diffuse_total + specular_total);
     FragColor = vec4(final_color, color.a);
-	NormalColor = vec4(v_normal * 0.5 + 0.5,1.0); // Store normal in NormalColor for debugging
+	
 }
+
+
 
 
 \flat.fs
@@ -323,11 +380,25 @@ uniform samplerCube u_texture;
 uniform vec3 u_camera_position;
 layout(location = 0) out vec4 FragColor;    // color buffer
 
+uniform sampler2D u_gbuffer_depth;
+uniform vec2 u_inv_screen_size;
+
 void main()
 {
 	vec3 E = v_world_position - u_camera_position;
 	vec4 color = texture( u_texture, E );
-	FragColor = color;
+	vec2 uv = gl_FragCoord.xy * u_inv_screen_size; //[0,1]
+
+	float depth = texture(u_gbuffer_depth, uv).r;
+
+	if (depth >= 1.0)
+	{
+		// This is the skybox, don't shade
+		FragColor = color;
+		return;
+	}
+	FragColor = vec4(0.0);
+
 }
 
 
