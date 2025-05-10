@@ -62,6 +62,7 @@ namespace SCN {
 		Vector4f color;			//color and opacity
 		float roughness_factor;	//how smooth or rough is the surface
 		float metallic_factor;	//how metallic is the surface
+		float shininess;        //specular reflection of the material
 		Vector3f emissive_factor;//does this object emit light?
 
 		//textures
@@ -71,6 +72,7 @@ namespace SCN {
 		Material() : alpha_mode(NO_ALPHA), alpha_cutoff(0.5), color(1, 1, 1, 1), two_sided(false), roughness_factor(1), metallic_factor(0) {
 			//color_texture = emissive_texture = metallic_roughness_texture = occlusion_texture = normal_texture = NULL;
 			index = s_last_index++;
+			shininess = 80;
 		}
 		virtual ~Material();
 

@@ -13,6 +13,27 @@ Camera::Camera()
 	setOrthographic(-100,100,-100, 100,-100,100);
 }
 
+//Camera::Camera(SCN::LightEntity* light)
+//{
+//	mat4 light_model = light->root.getGlobalMatrix();
+//	vec3 light_position = light_model.getTranslation();
+//	vec3 light_center = light_model * vec3(0.0f, 0.0f, -1.0f);
+//	vec3 light_up = vec3(0.0f, 1.0f, 0.0f);
+//
+//	lookAt(light_position, light_center, light_up);
+//
+//	float half_size = light->area / 2.0f;
+//	float near_plane = light->near_distance;
+//	float far_plane = light->max_distance;
+//
+//	if (light->light_type == SCN::eLightType::DIRECTIONAL) {
+//		setOrthographic(-half_size, half_size, -half_size, half_size, near_plane, far_plane);
+//	}
+//	else if (light->light_type == SCN::eLightType::SPOT) {
+//		setPerspective(2.0f * light->cone_info.y, 1.0f, near_plane, far_plane);
+//	}
+//}
+
 void Camera::enable()
 {
 	current = this;

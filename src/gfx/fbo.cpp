@@ -214,7 +214,7 @@ namespace GFX
 		//create texture
 		depth_texture = new Texture(width, height, GL_DEPTH_COMPONENT, GL_UNSIGNED_INT, false);
 		glFramebufferTexture2DEXT(GL_FRAMEBUFFER_EXT, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, depth_texture->texture_id, 0);
-
+		
 		GLenum status = glCheckFramebufferStatusEXT(GL_FRAMEBUFFER_EXT);
 		if (status != GL_FRAMEBUFFER_COMPLETE_EXT)
 		{
@@ -222,6 +222,7 @@ namespace GFX
 			return false;
 		}
 		glBindFramebufferEXT(GL_FRAMEBUFFER_EXT, 0);
+		
 		return true;
 	}
 

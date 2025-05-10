@@ -246,7 +246,7 @@ void Matrix44::setTranslation(float x, float y, float z)
 	m[14] = z;
 }
 
-Vector3f Matrix44::getTranslation()
+Vector3f Matrix44::getTranslation() const
 {
 	return Vector3f(m[12],m[13],m[14]);
 }
