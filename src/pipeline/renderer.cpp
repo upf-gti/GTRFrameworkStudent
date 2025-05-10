@@ -236,8 +236,8 @@ void Renderer::renderScene(SCN::Scene* scene, Camera* camera)
 	// HERE =====================
 	// TODO: RENDER RENDERABLES
 	// ==========================
-
 	// Render all opaque objects first
+	/*
 	for (sDrawCommand command : opaqueNodes) {
 		Renderer::renderMeshWithMaterial(command.model, command.mesh, command.material);
 	}
@@ -245,6 +245,17 @@ void Renderer::renderScene(SCN::Scene* scene, Camera* camera)
 	// Then render all transparent objects
 	for (sDrawCommand command : transparentNodes) {
 		Renderer::renderMeshWithMaterial(command.model, command.mesh, command.material);
+	}
+	*/
+
+	// Same for quad
+	for (sDrawCommand command : opaqueNodes) {
+		Renderer::renderQuadWithGFBO(command.model, command.mesh, command.material);
+	}
+
+	// Then render all transparent objects
+	for (sDrawCommand command : transparentNodes) {
+		Renderer::renderQuadWithGFBO(command.model, command.mesh, command.material);
 	}
 }
 
@@ -505,12 +516,15 @@ void Renderer::renderQuadWithGFBO(const Matrix44 model, GFX::Mesh* mesh, SCN::Ma
 	glEnable(GL_DEPTH_TEST);
 
 	//chose a shader
-	shader = GFX::Shader::Get("phong");
+	shader = GFX::Shader::Get("quad");
 	assert(glGetError() == GL_NO_ERROR);
 
 	//no shader? then nothing to render
 	if (!shader)
 		return;
+
+	//Assigmet 4 creation of quad
+	GFX::Mesh* quad = GFX::Mesh::Get("quad");
 
 	// Activate the shader
 	shader->enable();
@@ -623,63 +637,19 @@ void Renderer::renderQuadWithGFBO(const Matrix44 model, GFX::Mesh* mesh, SCN::Ma
 		shader->setUniform3Array("u_light_direction", reinterpret_cast<float*>(lightDirections.data()), numLights);
 		shader->setUniform2Array("u_light_cone_info", reinterpret_cast<float*>(lightConeInfo.data()), numLights);
 
+
+		//Assigment 4 pass of textures in gfbo
+		shader->setTexture("u_gbuffer_color", gbuffer_FBO.color_textures[0], 0);
+		shader->setTexture("u_gbuffer_normal", gbuffer_FBO.color_textures[1], 1);
+		shader->setTexture("u_gbuffer_depth", gbuffer_FBO.depth_texture, 2);
+
+		//Send inverse size of screen
+		shader->setUniform("u_inv_screen_size", Vector2f(1.0f / gbuffer_FBO.width, 1.0f / gbuffer_FBO.height));
+
+
 		// Render mesh
 		if (render_wireframe) glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
-		mesh->render(GL_TRIANGLES);
-	}
-	// Multi-pass rendering
-	else {
-
-		// Set blending state for multi-pass rendering
-		glDepthFunc(GL_LEQUAL);
-		glBlendFunc(GL_SRC_ALPHA, GL_ONE);
-
-		// Render each light separately with its shadow maps
-		for (int i = 0; i < numLights; i++) {
-
-			bool hasShadow = (i < nSh) && (lightTypes[i] == 1 || lightTypes[i] == 2);
-
-			if (hasShadow) {
-				shader->setUniform(shadowNames[0], shadow_FBOs[i].depth_texture, 2);
-				shader->setMatrix44Array("u_shadow_vps", &shadow_vps[i], 1);
-				shader->setUniform("u_numShadowCasters", 1);
-				shader->setUniform("u_shadow_bias", shadow_bias);
-			}
-			else {
-				// no hay sombra en esta pasada
-				shader->setUniform("u_numShadowCasters", 0);
-			}
-
-			// Enable/disable blending depending on the light and apply or no ambient light
-			if (i == 0) {
-				glDisable(GL_BLEND);
-
-				shader->setUniform("u_apply_ambient", 1);
-			}
-			else {
-				glEnable(GL_BLEND);
-
-				shader->setUniform("u_apply_ambient", 0);
-			}
-
-			// Upload light data for each pass
-			shader->setUniform("u_numLights", 1);
-			shader->setUniform3Array("u_light_pos", reinterpret_cast<const float*>(&lightPositions[i]), 1);
-			shader->setUniform3Array("u_light_color", reinterpret_cast<const float*>(&lightColors[i]), 1);
-			shader->setUniform1Array("u_light_intensity", &lightIntensities[i], 1);
-			shader->setUniform1Array("u_light_type", &lightTypes[i], 1);
-			shader->setUniform("u_ambient_light", scene->ambient_light);
-			shader->setUniform3Array("u_light_direction", reinterpret_cast<const float*>(&lightDirections[i]), 1);
-			shader->setUniform2Array("u_light_cone_info", reinterpret_cast<const float*>(&lightConeInfo[i]), 1);
-
-			// Render mesh
-			if (render_wireframe) glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
-			mesh->render(GL_TRIANGLES);
-		}
-
-		// Reset blending state
-		glDisable(GL_BLEND);
-		glDepthFunc(GL_LESS);
+		quad->render(GL_TRIANGLES);
 	}
 
 	//disable shader
