@@ -104,6 +104,7 @@ namespace SCN {
 
 		//render the skybox
 		void renderSkybox(GFX::Texture* cubemap) const;
+<<<<<<< Updated upstream
 
 		//to render one mesh given its material and transformation matrix
 		void renderMeshWithMaterial(const Matrix44 model, GFX::Mesh* mesh, SCN::Material* material) const;
@@ -114,6 +115,14 @@ namespace SCN {
 
 		//render the an entity from the point of view of the light camera
 		void renderPlain(Camera* camera, const Matrix44 model, GFX::Mesh* mesh, SCN::Material* material);
+=======
+		void renderMeshWithMaterial(DrawCommand draw_command) const;
+		void renderShadows(Camera* light_camera, GFX::FBO* shadow_fbo) const;
+		void renderShader(Camera* camera, DrawCommand draw_command, const char* shader_name) const;
+		void renderForward() const;
+		void renderDeferred();
+		void renderDeferredLightingPass();
+>>>>>>> Stashed changes
 
 		//to show user interface
 		void showUI();

@@ -6,6 +6,11 @@ depth quad.vs depth.fs
 multi basic.vs multi.fs
 compute test.cs
 plain basic.vs plain.fs
+<<<<<<< Updated upstream
+=======
+gbuffer_fill basic.vs gbuffer_fill.fs
+deferred_light_pass quad.vs deferred_light_pass.fs
+>>>>>>> Stashed changes
 
 \test.cs
 #version 430 core
@@ -344,3 +349,136 @@ void main()
 	//Some alpha testing would be good here
 	FragColor = vec4(0.0, 0.0, 0.0, 1.0);
 }
+<<<<<<< Updated upstream
+=======
+
+\gbuffer_fill.fs
+
+#version 330 core
+
+in vec3 v_position;
+in vec3 v_world_position;
+in vec3 v_normal;
+in vec2 v_uv;
+in vec4 v_color;
+
+uniform vec4 u_color;
+uniform sampler2D u_texture;
+
+uniform mat4 u_model;
+uniform mat4 u_viewprojection;
+uniform vec3 u_camera_position;
+
+layout(location = 0) out vec4 gbuffer_albedo;
+layout(location = 1) out vec4 gbuffer_normal_map;
+layout(location = 2) out vec4 gbuffer_depth_map;
+
+void main()
+{
+	vec2 uv = v_uv;
+	vec4 color = u_color;
+	
+	color *= texture( u_texture, uv );
+	gbuffer_albedo = color;
+	
+	gbuffer_normal_map = vec4((1 + normalize(v_normal))/2, 1.0);
+
+	
+	float depth = texture(u_texture, uv).r;
+	float depth_clip = depth * 2.0 - 1.0;
+	vec2 uv_clip = uv * 2.0 - 1.0;
+	vec4 clip_coords = vec4(uv_clip.x, uv_clip.y, depth_clip, 1.0);
+	vec4 not_norm_world_pos = u_viewprojection * clip_coords;
+	vec3 world_pos = not_norm_world_pos.xyz / not_norm_world_pos.w;
+	gbuffer_depth_map = vec4(world_pos, 1.0);
+}
+
+
+\deferred_light_pass.fs
+
+#version 330 core
+
+in vec2 v_uv;
+out vec4 FragColor;
+
+// G-buffer
+uniform sampler2D u_gbuffer_color;
+uniform sampler2D u_gbuffer_normal;
+uniform sampler2D u_gbuffer_depth;
+
+// View
+uniform mat4 u_inv_vp_mat;
+uniform vec3 u_camera_position;
+uniform vec2 u_res_inv;
+
+// Lighting
+#define MAX_NUM_LIGHTS 16
+uniform int u_num_lights;
+uniform vec3 u_light_ambient;
+uniform vec3 u_light_positions[MAX_NUM_LIGHTS];
+uniform vec3 u_light_colors[MAX_NUM_LIGHTS];
+uniform vec3 u_light_directions[MAX_NUM_LIGHTS];
+uniform float u_light_intensities[MAX_NUM_LIGHTS];
+uniform int u_light_types[MAX_NUM_LIGHTS]; // 0: point, 1: directional, 2: spot
+uniform float u_light_cos_angle_max[MAX_NUM_LIGHTS];
+uniform float u_light_cos_angle_min[MAX_NUM_LIGHTS];
+
+const float shininess = 32.0;
+
+// Shading
+#define MAX_NUM_SHADOWS 16
+uniform int u_num_shadows;
+uniform sampler2D u_shadow_maps[MAX_NUM_SHADOWS];
+uniform mat4 u_shadow_vps[MAX_NUM_SHADOWS];
+uniform float u_shadow_biases[MAX_NUM_SHADOWS];
+
+
+void main() {
+    vec2 uv = gl_FragCoord.xy * u_res_inv;
+
+    vec3 albedo = texture(u_gbuffer_color, uv).rgb;
+    vec3 normal = normalize(texture(u_gbuffer_normal, uv).xyz);
+    float depth = texture(u_gbuffer_depth, uv).r;
+
+    float depth_clip = depth * 2.0 - 1.0;
+    vec2 uv_clip = uv * 2.0 - 1.0;
+    vec4 clip_coords = vec4(uv_clip, depth_clip, 1.0);
+
+    vec4 pos_h = u_inv_vp_mat * clip_coords;
+    vec3 world_pos = pos_h.xyz / pos_h.w;
+
+    vec3 view_dir = normalize(u_camera_position - world_pos);
+    vec3 final_color = u_light_ambient * albedo;
+
+    for (int i = 0; i < u_num_lights && i < MAX_NUM_LIGHTS; ++i) {
+        vec3 light_dir;
+        float attenuation = 1.0;
+
+        if (u_light_types[i] == 0) { // Point light
+            vec3 light_vec = u_light_positions[i] - world_pos;
+            float dist = length(light_vec);
+            light_dir = normalize(light_vec);
+            attenuation = 1.0 / (dist * dist); // Simple attenuation
+        }
+        else if (u_light_types[i] == 1) { // Directional light
+            light_dir = normalize(-u_light_directions[i]);
+        }
+        else {
+            continue;
+        }
+
+        // Phong lighting
+        float diff = max(dot(normal, light_dir), 0.0);
+        vec3 half_vec = normalize(light_dir + view_dir);
+        float spec = pow(max(dot(normal, half_vec), 0.0), shininess);
+
+        vec3 light_color = u_light_colors[i] * u_light_intensities[i];
+        vec3 diffuse = diff * light_color * albedo;
+        vec3 specular = spec * light_color;
+
+        final_color += attenuation * (diffuse + specular);
+    }
+
+    FragColor = vec4(final_color, 1.0);
+}
+>>>>>>> Stashed changes
