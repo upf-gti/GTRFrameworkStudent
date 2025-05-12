@@ -6,11 +6,8 @@ depth quad.vs depth.fs
 multi basic.vs multi.fs
 compute test.cs
 plain basic.vs plain.fs
-<<<<<<< Updated upstream
-=======
 gbuffer_fill basic.vs gbuffer_fill.fs
 deferred_light_pass quad.vs deferred_light_pass.fs
->>>>>>> Stashed changes
 
 \test.cs
 #version 430 core
@@ -127,6 +124,7 @@ uniform float u_shadow_biases[10];
 
 out vec4 FragColor;
 
+
 float computeShadow(int shadow_num) {                    
     vec4 light_space_pos = u_shadow_vps[shadow_num] * vec4(v_world_position, 1.0);
     vec3 proj_coords = light_space_pos.xyz / light_space_pos.w;
@@ -240,6 +238,9 @@ uniform samplerCube u_texture;
 uniform vec3 u_camera_position;
 out vec4 FragColor;
 
+layout(location = 0) out vec4 gbuffer_albedo;
+layout(location = 1) out vec4 gbuffer_normal_mat;
+
 void main()
 {
 	vec3 E = v_world_position - u_camera_position;
@@ -349,8 +350,6 @@ void main()
 	//Some alpha testing would be good here
 	FragColor = vec4(0.0, 0.0, 0.0, 1.0);
 }
-<<<<<<< Updated upstream
-=======
 
 \gbuffer_fill.fs
 
@@ -392,7 +391,6 @@ void main()
 	vec3 world_pos = not_norm_world_pos.xyz / not_norm_world_pos.w;
 	gbuffer_depth_map = vec4(world_pos, 1.0);
 }
-
 
 \deferred_light_pass.fs
 
@@ -481,4 +479,3 @@ void main() {
 
     FragColor = vec4(final_color, 1.0);
 }
->>>>>>> Stashed changes
