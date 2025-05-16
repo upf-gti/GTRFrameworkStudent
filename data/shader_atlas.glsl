@@ -132,6 +132,19 @@ vec3 perturbNormal(vec3 N, vec3 WP, vec2 uv, vec3 normal_pixel)
 	return normalize(TBN * normal_pixel);
 }
 
+//Decoding for normals
+vec3 decodeNormal(vec2 enc)
+{
+	float angle = (enc.x * 2.0 - 1.0) * 3.1415926535897932384626433832795;
+	float z = enc.y * 2.0 - 1.0;
+
+	float xyLen = sqrt(max(0.0,1.0 - z * z));
+
+	float x = cos(angle) * xyLen;
+	float y = sin(angle) * xyLen;
+	return normalize(vec3(x,y,z));
+}
+
 // Inputs from vertex shader
 in vec3 v_world_position;
 in vec3 v_normal;
@@ -185,6 +198,8 @@ uniform mat4 u_inv_viewprojection;
 
 uniform bool u_first_pass;
 
+uniform bool u_compressnormals;
+
 void main() {
 
 	//Assigment 4 getting data from gbuffer
@@ -226,6 +241,12 @@ void main() {
 
 	// Get the perturbed normal from the normal map
     vec3 normal_pixel = texture(u_gbuffer_normal, uv).rgb;
+	if(u_compressnormals){
+		normal_pixel = decodeNormal(normal_pixel.xy);
+	}
+	
+
+
     vec3 N = normal_pixel * 2.0 - 1.0;
     vec3 V = normalize(u_camera_position - world_pos);
 
@@ -362,6 +383,16 @@ uniform float u_time;
 uniform float u_alpha_cutoff;
 uniform mat4 u_model;
 uniform bool u_transparent;
+uniform bool u_compressnormals;
+
+vec2 encode (vec3 n)
+{
+    float kPI = 3.1415926535897932384626433832795;
+	float angle = atan(n.y,n.x);
+	float z = n.z;
+
+    return vec2((angle/kPI +1.0) * 0.5, (z + 1.0) * 0.5);
+}
 
 float dither4x4(vec2 position, float brightness)
 {
@@ -413,7 +444,13 @@ void main()
 	vec3 normal = v_normal;
 	normal = normalize(normal);
 	FragColor = color;
-	NormalColor = vec4(normal * 0.5 + 0.5,1.0);
+	normal = normal * 0.5 + 0.5;
+	NormalColor = vec4(normal,1.0);
+	if(u_compressnormals){
+		vec2 compressnormal = encode(normal);
+		NormalColor = vec4(compressnormal, 0.0,1.0);
+	}
+	
 }
 
 

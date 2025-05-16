@@ -42,6 +42,7 @@ std::vector<sDrawCommand> lightSpheres; // Assignment 4
 bool use_multipass = false;
 bool use_deferred_rendering = false; // Assignment 4
 bool ditering = false;
+bool compress_normals = false; // Assignment 4
 
 // Minimum alpha value to consider a pixel visible (used for alpha testing)
 float alpha_cutoff = 0;
@@ -587,6 +588,7 @@ void Renderer::renderQuadWithGFBO(const Matrix44 model, GFX::Mesh* mesh, SCN::Ma
 	// Upload time, for cool shader effects
 	float t = getTime();
 	shader->setUniform("u_time", t);
+	shader->setUniform("u_compressnormals", compress_normals);
 
 	// Prepare light information
 	const int MAX_LIGHTS = 100;
@@ -710,6 +712,7 @@ void Renderer::showUI()
 
 	ImGui::Checkbox("Deferred Rendering", &use_deferred_rendering);
 	ImGui::Checkbox("Ditering", &ditering);
+	ImGui::Checkbox("Compress Normals", &compress_normals);
 
 	// Slider to adjust the shadow bias
 	ImGui::SliderFloat("Shadow bias", &shadow_bias, 0.0f, 0.1f);
@@ -831,7 +834,7 @@ void Renderer::rendertoLightFBO() {
 	static GFX::Mesh sphereforrender;
 	static bool created = false;
 	static GFX::Mesh coneforrender;
-
+	
 	if (!created) {
 		sphereforrender.createSphere(1.0f, 20, 20); // unit sphere
 		created = true;
@@ -973,6 +976,7 @@ void Renderer::renderMeshwithTexture(const Matrix44 model, GFX::Mesh* mesh, SCN:
 	shader->setUniform("u_viewprojection", camera->viewprojection_matrix);
 	shader->setUniform("u_camera_position", camera->eye);
 	shader->setUniform("u_alpha_cutoff", alpha_cutoff);
+	shader->setUniform("u_compressnormals", compress_normals);
 	mesh->render(GL_TRIANGLES);
 	shader->disable();
 }
