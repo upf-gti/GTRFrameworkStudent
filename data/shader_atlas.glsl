@@ -8,6 +8,7 @@ multi basic.vs multi.fs
 compute test.cs
 phong basic.vs phong.fs
 quad quad.vs quad.fs
+light_volume basic.vs phong_sphere.fs
 
 \test.cs
 #version 430 core
@@ -182,22 +183,28 @@ uniform samplerCube u_sky_text;
 
 uniform mat4 u_inv_viewprojection;
 
-void main() {
-	//Assigment 4 getting data from gbuffer
-	vec2 uv = gl_FragCoord.xy * u_inv_screen_size; //[0,1]
-	float depth = texture(u_gbuffer_depth, uv).x;
-	float depth_clip = depth * 2.0 - 1.0; // [0,1] -> [-1,1]
+uniform bool u_first_pass;
 
-	vec2 uv_clip = uv * 2.0 - 1.0; // [0,1] -> [-1,1]
-	vec4 clip_coords = vec4(uv_clip.x, uv_clip.y, depth_clip, 1.0);
+void main() {
+
+	//Assigment 4 getting data from gbuffer
+	vec2 uv = gl_FragCoord.xy * u_inv_screen_size;
+
+	float depth = texture(u_gbuffer_depth, uv).r;
+	float depth_clip = depth * 2.0 - 1.0;
+
+	vec2 uv_clip = uv * 2.0 - 1.0;
+	vec4 clip_coords = vec4(uv_clip.x, uv_clip.y, depth_clip,1.0);
 
 	vec4 not_norm_world_pos = u_inv_viewprojection * clip_coords;
 
 	vec3 world_pos = not_norm_world_pos.xyz / not_norm_world_pos.w;
 
     // Get the base color
-    vec4 tex_color = texture(u_gbuffer_color, uv);
+    vec4 tex_color = texture(u_texture, v_uv);
     vec4 color = tex_color * u_color;
+	color = texture(u_gbuffer_color,uv);
+
 
 	// Discard the fragment if its alpha is below the cutoff (transparent)
     if (color.a < u_alpha_cutoff)
@@ -209,7 +216,7 @@ void main() {
 
     // Ambient term calculation
     vec3 ambient = vec3(0.0);
-	if (u_apply_ambient) {
+	if (u_apply_ambient && u_first_pass) {
 		ambient = u_ambient_light * base_color;
 	}
 
@@ -219,7 +226,7 @@ void main() {
 
 	// Get the perturbed normal from the normal map
     vec3 normal_pixel = texture(u_gbuffer_normal, uv).rgb;
-    vec3 N = perturbNormal(normalize(v_normal), world_pos, uv, normal_pixel);
+    vec3 N = normal_pixel * 2.0 - 1.0;
     vec3 V = normalize(u_camera_position - world_pos);
 
 	// Loop through all lights and calculate their contribution
@@ -251,18 +258,18 @@ void main() {
         float attenuation = 1.0;
 		
 		// Point light calculation
-        if (u_light_type[i] == 0) {
+        if (u_light_type[i] == 0 && !u_first_pass) {
             L = normalize(u_light_pos[i] - world_pos);
             float distance = length(u_light_pos[i] - world_pos);
             attenuation = 1.0 / (distance * distance);
         }
 		// Directional light calculation
-        else if (u_light_type[i] == 1) { // Luz direccional
+        else if (u_light_type[i] == 1 && u_first_pass) { // Luz direccional
             L = normalize(u_light_direction[i]);
             attenuation = 1.0;
         }
 		// Spotlight calculation
-		else if (u_light_type[i] == 2) { // Spotlight
+		else if (u_light_type[i] == 2 && !u_first_pass) { // Spotlight
   			L = normalize(u_light_pos[i] - world_pos);
             float distance = length(u_light_pos[i] - world_pos);
     
@@ -285,7 +292,7 @@ void main() {
 
 		// Phong shading calculations: Diffuse and specular
 		float N_dot_L = clamp(dot(N, L), 0.0, 1.0);
-		vec3 R = reflect(L, N); // Reflection vector
+		vec3 R = reflect(-L, N); // Reflection vector
 		float R_dot_V = clamp(dot(R, V), 0.0, 1.0); // View reflection term
 
 		// Diffuse and specular lighting contributions
@@ -299,12 +306,15 @@ void main() {
 		}
 
         // Accumulate diffuse and specular contributions
-		diffuse_total += light_diffuse;
-		specular_total += light_specular;
+		if(u_first_pass && u_light_type[i] == 1){
+			diffuse_total += light_diffuse;
+			specular_total += light_specular;
+		}
+		
 			
     }
 
-	if(depth >= 1.0)
+	if(depth >= 1.0 && u_first_pass)
 	{
 		// This is the skybox, don't shade
 		vec3 E = world_pos - u_camera_position;
@@ -312,6 +322,7 @@ void main() {
 		FragColor = skybox_color;
 		return;
 	}
+
 	// Final color calculation with ambient, diffuse, and specular components
 	vec3 final_color = ambient + (diffuse_total + specular_total);
     FragColor = vec4(final_color, color.a);
@@ -350,6 +361,36 @@ uniform sampler2D u_texture;
 uniform float u_time;
 uniform float u_alpha_cutoff;
 uniform mat4 u_model;
+uniform bool u_transparent;
+
+float dither4x4(vec2 position, float brightness)
+{
+  int x = int(mod(position.x, 4.0));
+  int y = int(mod(position.y, 4.0));
+  int index = x + y * 4;
+  float limit = 0.0;
+
+  if (x < 8) {
+    if (index == 0) limit = 0.0625;
+    if (index == 1) limit = 0.5625;
+    if (index == 2) limit = 0.1875;
+    if (index == 3) limit = 0.6875;
+    if (index == 4) limit = 0.8125;
+    if (index == 5) limit = 0.3125;
+    if (index == 6) limit = 0.9375;
+    if (index == 7) limit = 0.4375;
+    if (index == 8) limit = 0.25;
+    if (index == 9) limit = 0.75;
+    if (index == 10) limit = 0.125;
+    if (index == 11) limit = 0.625;
+    if (index == 12) limit = 1.0;
+    if (index == 13) limit = 0.5;
+    if (index == 14) limit = 0.875;
+    if (index == 15) limit = 0.375;
+  }
+
+  return brightness < limit ? 0.0 : 1.0;
+}
 
 layout(location = 0) out vec4 FragColor;
 layout(location = 1) out vec4 NormalColor;
@@ -359,10 +400,17 @@ void main()
 	vec4 color = u_color;
 	color *= texture( u_texture, v_uv );
 
-	if(color.a < u_alpha_cutoff)
-		discard;
+	if (u_transparent) {
+        // Apply dithering instead of alpha cutoff
+        if (dither4x4(gl_FragCoord.xy, color.a) == 0.0)
+            discard;
+    } else {
+        // Normal alpha cutoff for opaque objects
+        if (color.a < u_alpha_cutoff)
+            discard;
+    }
 
-	vec3 normal = transpose(inverse(mat3(u_model))) * v_normal;
+	vec3 normal = v_normal;
 	normal = normalize(normal);
 	FragColor = color;
 	NormalColor = vec4(normal * 0.5 + 0.5,1.0);
@@ -706,3 +754,218 @@ void main()
 	// Output black
     FragColor = vec4(0.0);
 }
+
+\phong_sphere.fs
+#version 330 core
+
+#define MAX_LIGHTS 100
+#define MAX_SHADOW_CASTERS 4
+
+
+mat3 cotangentFrame(vec3 N, vec3 p, vec2 uv) {
+  // get edge vectors of the pixel triangle
+  vec3 dp1 = dFdx(p);
+  vec3 dp2 = dFdy(p);
+  vec2 duv1 = dFdx(uv);
+  vec2 duv2 = dFdy(uv);
+
+  // solve the linear system
+  vec3 dp2perp = cross(dp2, N);
+  vec3 dp1perp = cross(N, dp1);
+  vec3 T = dp2perp * duv1.x + dp1perp * duv2.x;
+  vec3 B = dp2perp * duv1.y + dp1perp * duv2.y;
+
+  // construct a scale-invariant frame 
+  float invmax = 1.0 / sqrt(max(dot(T,T), dot(B,B)));
+  return mat3(normalize(T * invmax), normalize(B * invmax), N);
+}
+
+vec3 perturbNormal(vec3 N, vec3 WP, vec2 uv, vec3 normal_pixel)
+{
+	normal_pixel = normal_pixel * 255./127. - 128./127.;
+	mat3 TBN = cotangentFrame(N, WP, uv);
+	return normalize(TBN * normal_pixel);
+}
+
+// Inputs from vertex shader
+in vec3 v_world_position;
+in vec3 v_normal;
+in vec2 v_uv;
+
+// Camera info
+uniform vec3 u_camera_position;
+
+// Material and textures
+
+uniform vec4 u_color;
+uniform sampler2D u_texture;
+uniform sampler2D u_texture_normal;
+
+
+// Light info
+
+uniform vec3 u_light_pos;
+uniform vec3 u_light_color;	
+uniform float u_light_intensity;
+uniform int u_light_type; // 0 = point, 1 = directional, 2 = spotlight
+
+// Optional ambient light
+uniform float u_shininess;
+
+// Spotlight data
+uniform vec3 u_light_direction;
+uniform vec2 u_light_cone_info; // x = min angle, y = max angle (in radians)
+
+// Shadow mapping
+uniform sampler2D u_shadow_maps;
+uniform mat4 u_shadow_vps;
+uniform float u_shadow_bias;
+uniform int    u_numShadowCasters;
+
+// Alpha discard
+uniform float u_alpha_cutoff;
+
+uniform vec2 u_inv_screen_size;
+//Unifroms from gbuffer
+
+uniform sampler2D u_gbuffer_color;
+uniform sampler2D u_gbuffer_normal;
+uniform sampler2D u_gbuffer_depth;
+
+
+uniform samplerCube u_sky_text;
+
+uniform mat4 u_inv_viewprojection;
+
+layout(location = 0) out vec4 FragColor; // Final color output
+   // color buffer
+layout(location = 1) out vec4 NormalColor;  // normal buffer
+
+void main() {
+    //Assigment 4 getting data from gbuffer
+	vec2 uv = gl_FragCoord.xy * u_inv_screen_size; //[0,1]
+	float depth = texture(u_gbuffer_depth, uv).x;
+	float depth_clip = depth * 2.0 - 1.0; // [0,1] -> [-1,1]
+
+	vec2 uv_clip = uv * 2.0 - 1.0; // [0,1] -> [-1,1]
+	vec4 clip_coords = vec4(uv_clip.x, uv_clip.y, depth_clip, 1.0);
+
+	vec4 not_norm_world_pos = u_inv_viewprojection * clip_coords;
+
+	vec3 world_pos = not_norm_world_pos.xyz / not_norm_world_pos.w;
+
+    // Get the base color
+    vec4 tex_color = texture(u_gbuffer_color, uv);
+    vec4 color = tex_color;
+
+	// Discard the fragment if its alpha is below the cutoff (transparent)
+    if (color.a < u_alpha_cutoff)
+        discard;
+
+    vec3 base_color = color.rgb;
+
+	// Store base color for gFBO
+
+	// Initialize lighting accumulators
+    vec3 diffuse_total = vec3(0.0);
+    vec3 specular_total = vec3(0.0);
+
+	// Get the perturbed normal from the normal map
+	vec3 normal_fromuv = texture(u_gbuffer_normal, uv).rgb;
+    vec3 normal_pixel = texture(u_texture_normal, uv).rgb;
+    vec3 N = perturbNormal(normalize(normal_fromuv), world_pos, uv, normal_pixel);
+    vec3 V = normalize(u_camera_position - world_pos);
+
+	/*
+	// Get the perturbed normal from the normal map
+    vec3 normal_fromuv = texture(u_gbuffer_normal, uv).rgb;
+	vec3 normal_pixel = texture(u_texture_normal, uv).rgb;
+    vec3 N = perturbNormal(normalize(normal_fromuv), world_pos, uv, normal_pixel);
+    //N = normalize(texture(u_gbuffer_normal, uv).rgb) * 2.0 -1.0;
+	N = normalize(N);
+    vec3 V = normalize(u_camera_position - world_pos);
+	*/
+	// Loop through all lights and calculate their contribution
+   
+
+        float shadow_factor = 1.0; // Default: no shadow
+
+		// Calculate shadow for shadow-casting lights
+		
+            vec4 proj_pos   = u_shadow_vps * vec4(world_pos, 1.0);
+            float real_depth  = (proj_pos.z - u_shadow_bias) / proj_pos.w;
+            proj_pos /= proj_pos.w;
+            vec2 shadow_uv    = proj_pos.xy * 0.5 + 0.5;
+            float shadow_depth = texture(u_shadow_maps, shadow_uv).x;
+            float current_depth = real_depth * 0.5 + 0.5;
+
+			// Compare the fragment depth with the shadow depth to apply shadowing
+            if (shadow_uv.x >= 0.0 && shadow_uv.x <= 1.0 &&
+                shadow_uv.y >= 0.0 && shadow_uv.y <= 1.0)
+            {
+                if (current_depth > shadow_depth)
+                    shadow_factor = 0.0;
+            }
+        
+
+
+		// Light direction and attenuation calculation
+        vec3 L;
+        float attenuation = 1.0;
+		
+		// Point light calculation
+        if (u_light_type == 0) {
+            L = normalize(u_light_pos - world_pos);
+            float distance = length(u_light_pos - world_pos);
+            attenuation = 1.0 / (distance * distance);
+        }
+		// Spotlight calculation
+		else if (u_light_type == 2) { // Spotlight
+  			L = normalize(u_light_pos - world_pos);
+			
+            float distance = length(u_light_pos - world_pos);
+    
+			vec3 D = normalize(u_light_direction);
+			float cos_angle = dot(L, D); 
+
+			float cos_alpha_min = cos(u_light_cone_info.x);
+			float cos_alpha_max = cos(u_light_cone_info.y);
+
+			float spot_factor = 0.0;
+			if (cos_angle >= cos_alpha_max) {
+				spot_factor = clamp(
+					(cos_angle - cos_alpha_max) / (cos_alpha_min - cos_alpha_max),
+					0.0, 1.0
+				);
+			}
+
+			attenuation = (1.0 / (distance * distance)) * spot_factor;
+		}
+		
+		// Phong shading calculations: Diffuse and specular
+		float N_dot_L = clamp(dot(N, L), 0.0, 1.0);
+		vec3 R = reflect(L, N); // Reflection vector
+		float R_dot_V = clamp(dot(R, V), 0.0, 1.0); // View reflection term
+
+		// Diffuse and specular lighting contributions
+		vec3 light_diffuse = base_color * N_dot_L * u_light_color * u_light_intensity * attenuation;
+		vec3 light_specular = base_color * u_light_color * u_light_intensity * attenuation * pow(R_dot_V, 0.1);
+
+		// Apply shadow factor to light if shadow exists
+		
+		if ((u_light_type==1 || u_light_type==2) ){
+			light_diffuse  *= shadow_factor;
+			light_specular *= shadow_factor;
+		}
+		
+        // Accumulate diffuse and specular contributions
+		diffuse_total += light_diffuse;
+		specular_total += light_specular;
+			
+    
+
+	// Final color calculation with ambient, diffuse, and specular components
+	vec3 final_color = (diffuse_total + specular_total);
+    FragColor = vec4(light_specular + light_diffuse, color.a);
+}
+

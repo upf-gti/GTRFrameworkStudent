@@ -55,7 +55,7 @@ namespace SCN {
 		//to render one mesh given its material and transformation matrix
 		void renderMeshWithMaterial(const Matrix44 model, GFX::Mesh* mesh, SCN::Material* material);
 
-		void renderQuadWithGFBO(const Matrix44 model, GFX::Mesh* mesh, SCN::Material* material);
+		void renderQuadWithGFBO(const Matrix44 model, GFX::Mesh* mesh, SCN::Material* material, bool firstlightingpass);
 
 		void renderMeshwithTexture(const Matrix44 model, GFX::Mesh* mesh, SCN::Material* material);
 
@@ -65,7 +65,11 @@ namespace SCN {
 
 		void renderToShadowMap();  //Assignment 3
 
-		void rendertoGFBO(); //Assignment 4
+		void rendertoGFBO(); //Assignment 4 takes data form scenen
+
+		void rendertoLightFBO(); //Assignment 4 to accumulate lighting
+
+		void createSpheresOfLights(std::vector<SCN::LightEntity*> lights); //assigment 4
 
 		void renderPlain(const Camera& lightCam,
 			const Matrix44& model,

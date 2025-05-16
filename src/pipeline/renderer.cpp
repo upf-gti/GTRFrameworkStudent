@@ -36,8 +36,12 @@ std::vector<sDrawCommand> opaqueNodes;
 // List of all lights in the scene
 std::vector<SCN::LightEntity*> lights;
 
+std::vector<sDrawCommand> lightSpheres; // Assignment 4
+
 // If true, use multipass rendering (e.g., per-light passes)
 bool use_multipass = false;
+bool use_deferred_rendering = false; // Assignment 4
+bool ditering = false;
 
 // Minimum alpha value to consider a pixel visible (used for alpha testing)
 float alpha_cutoff = 0;
@@ -59,6 +63,8 @@ std::vector<Matrix44>   shadow_vps;
 //Assigment 4
 //Store the G-buffer FBO
 GFX::FBO gbuffer_FBO;
+//Store the FBO for lighting pass
+GFX::FBO lighting_FBO;
 
 Camera lightCam; // Assignment 3
 
@@ -86,7 +92,12 @@ Renderer::Renderer(const char* shader_atlas_filename)
 		2, // Create two texture to render to
 		GL_RGBA, // Each texture has an R G B and A channels
 		GL_UNSIGNED_BYTE, // Uses 8 bits per channel
-		true); // No depth texture
+		true); 
+	lighting_FBO.create(1024, 768,
+		1, // Create one texture to render to
+		GL_RGBA, // Each texture has an R G B and A channels
+		GL_FLOAT, // Uses 8 bits per channel, we have to try more
+		true); 
 
 
 }
@@ -206,6 +217,7 @@ void Renderer::parseSceneEntities(SCN::Scene* scene, Camera* cam) {
 			lights.push_back(lightEntity);
 		}
 	}
+	//Renderer::createSpheresOfLights(lights);
 
 	// Sort opaque and transparent nodes based on camera distance
 	orderNodes(cam);
@@ -220,7 +232,9 @@ void Renderer::renderScene(SCN::Scene* scene, Camera* camera)
 
 	renderToShadowMap();// Assignment 3  3.2.2
 
-	rendertoGFBO(); // Assignment 4
+	rendertoGFBO(); // Assignment 4, takes color and normal from scene to texture
+
+	
 
 	//set the clear color (the background color)
 	glClearColor(scene->background_color.x, scene->background_color.y, scene->background_color.z, 1.0);
@@ -237,27 +251,40 @@ void Renderer::renderScene(SCN::Scene* scene, Camera* camera)
 	// TODO: RENDER RENDERABLES
 	// ==========================
 	// Render all opaque objects first
-	/*
-	for (sDrawCommand command : opaqueNodes) {
-		Renderer::renderMeshWithMaterial(command.model, command.mesh, command.material);
+	if (!use_deferred_rendering) {
+		for (sDrawCommand command : opaqueNodes) {
+			Renderer::renderMeshWithMaterial(command.model, command.mesh, command.material);
+		}
+
+		// Then render all transparent objects
+		for (sDrawCommand command : transparentNodes) {
+			Renderer::renderMeshWithMaterial(command.model, command.mesh, command.material);
+		}
 	}
 
-	// Then render all transparent objects
-	for (sDrawCommand command : transparentNodes) {
-		Renderer::renderMeshWithMaterial(command.model, command.mesh, command.material);
-	}
-	*/
+	
+	if (use_deferred_rendering) {
+		// Same for quad
+		for (sDrawCommand command : opaqueNodes) {
+			Renderer::renderQuadWithGFBO(command.model, command.mesh, command.material, true); //True for first pass(directional and ambient only)
+		}
+
+		// Then render all transparent objects
+		for (sDrawCommand command : transparentNodes) {
+			Renderer::renderQuadWithGFBO(command.model, command.mesh, command.material, true);
+		}
 
 
-	// Same for quad
-	for (sDrawCommand command : opaqueNodes) {
-		Renderer::renderQuadWithGFBO(command.model, command.mesh, command.material);
-	}
 
-	// Then render all transparent objects
-	for (sDrawCommand command : transparentNodes) {
-		Renderer::renderQuadWithGFBO(command.model, command.mesh, command.material);
+		Renderer::rendertoLightFBO(); //True for first pass(directional and ambient only)
+		for (sDrawCommand command : transparentNodes) {
+			Renderer::renderMeshWithMaterial(command.model, command.mesh, command.material);
+		}
 	}
+		
+	
+	
+	
 }
 
 
@@ -508,7 +535,7 @@ void Renderer::renderMeshWithMaterial(const Matrix44 model, GFX::Mesh* mesh, SCN
 
 
 //Render the scene using a quad and gFBO assigment 4
-void Renderer::renderQuadWithGFBO(const Matrix44 model, GFX::Mesh* mesh, SCN::Material* material)
+void Renderer::renderQuadWithGFBO(const Matrix44 model, GFX::Mesh* mesh, SCN::Material* material, bool firstlightingpass)
 {
 	//in case there is nothing to do
 	if (!mesh || !mesh->getNumVertices() || !material)
@@ -649,8 +676,9 @@ void Renderer::renderQuadWithGFBO(const Matrix44 model, GFX::Mesh* mesh, SCN::Ma
 		shader->setTexture("u_gbuffer_normal", gbuffer_FBO.color_textures[1], 1);
 		shader->setTexture("u_gbuffer_depth", gbuffer_FBO.depth_texture, 2);
 
-		shader->setUniform("u_sky_text", skybox_cubemap, 0);
 
+		//pass to do only ambient + directional + skybox
+		shader->setUniform("u_first_pass", firstlightingpass);
 
 		//Send inverse size of screen
 		shader->setUniform("u_inv_screen_size", Vector2f(1.0f / gbuffer_FBO.width, 1.0f / gbuffer_FBO.height));
@@ -679,6 +707,9 @@ void Renderer::showUI()
 
 	// Checkbox to enable or disable multipass rendering
 	ImGui::Checkbox("Use Multipass Rendering", &use_multipass);
+
+	ImGui::Checkbox("Deferred Rendering", &use_deferred_rendering);
+	ImGui::Checkbox("Ditering", &ditering);
 
 	// Slider to adjust the shadow bias
 	ImGui::SliderFloat("Shadow bias", &shadow_bias, 0.0f, 0.1f);
@@ -773,8 +804,144 @@ void Renderer::rendertoGFBO() {
 
 	for (sDrawCommand& cmd : opaqueNodes)
 		renderMeshwithTexture(cmd.model, cmd.mesh, cmd.material);
+	
+
+	for (sDrawCommand& cmd : transparentNodes)
+		renderMeshwithTexture(cmd.model, cmd.mesh, cmd.material);
+
 
 	gbuffer_FBO.unbind();
+
+}
+
+void Renderer::rendertoLightFBO() {
+	if (lights.empty())
+		return;
+	assert(glGetError() == GL_NO_ERROR);
+
+	GFX::Shader* shader = NULL;
+	shader = GFX::Shader::Get("light_volume");
+	Camera* camera = Camera::current;
+	glEnable(GL_DEPTH_TEST);
+	//chose a shader
+	
+	if (!shader)
+		return;
+
+	static GFX::Mesh sphereforrender;
+	static bool created = false;
+	static GFX::Mesh coneforrender;
+
+	if (!created) {
+		sphereforrender.createSphere(1.0f, 20, 20); // unit sphere
+		created = true;
+	}
+
+	gbuffer_FBO.depth_texture->copyTo(lighting_FBO.depth_texture);
+	lighting_FBO.bind();
+
+	glClearColor(0.0f, 0.0f, 0.0f, 0.0f); // Clear to black
+	glClear(GL_COLOR_BUFFER_BIT);
+
+	glDepthFunc(GL_GREATER);
+	glDepthMask(GL_FALSE);
+	glBlendFunc(GL_ONE, GL_ONE);
+	glEnable(GL_BLEND);
+	glFrontFace(GL_CW);
+
+
+	assert(glGetError() == GL_NO_ERROR);
+	static const char* shadowNames[MAX_SHADOW_CASTERS] = {
+		"u_shadow_maps[0]",
+		"u_shadow_maps[1]",
+		"u_shadow_maps[2]",
+		"u_shadow_maps[3]"
+	};
+	shader->enable();
+
+	
+	for (int i = 0; i < lights.size(); i++)
+	{
+		if (!lights[i]->visible)
+			continue;
+		if (lights[i]->light_type == SCN::eLightType::DIRECTIONAL)
+			continue;
+		if (lights[i]->light_type == SCN::eLightType::POINT) {
+
+			mat4 modela = mat4();
+			modela.translate(lights[i]->root.getGlobalMatrix().getTranslation().x, lights[i]->root.getGlobalMatrix().getTranslation().y, lights[i]->root.getGlobalMatrix().getTranslation().z);
+			modela.scale(lights[i]->max_distance, lights[i]->max_distance, lights[i]->max_distance);
+			//modela.scale(0.9, 0.9, 0.9);
+			shader->setUniform("u_model", modela);
+		}
+		if (lights[i]->light_type == SCN::eLightType::SPOT) {
+			continue;
+			float* alpha_min = new float;
+			*alpha_min =	DEG2RAD * lights[i]->cone_info.x;
+			float* alpha_max = new float;
+			*alpha_max = DEG2RAD * lights[i]->cone_info.y;
+
+			shader->setUniform2("u_light_cone_info", *alpha_min, *alpha_max);
+		}
+		//uniforms
+		
+		// Upload camera uniforms
+		shader->setUniform("u_viewprojection", camera->viewprojection_matrix);
+		shader->setUniform("u_camera_position", camera->eye);
+		shader->setUniform("u_alpha_cutoff", alpha_cutoff);
+
+		//shader->setUniform1("u_shininess", material->shininess);
+		// Upload light data	
+		shader->setUniform3("u_light_pos", lights[i]->root.getGlobalMatrix().getTranslation());
+		shader->setUniform3("u_light_color", lights[i]->color);
+		shader->setUniform1("u_light_intensity", lights[i]->intensity);
+
+		
+		shader->setUniform1("u_light_type", 0);
+		shader->setUniform3("u_light_direction", lights[i]->root.getGlobalMatrix().frontVector().normalize());
+		shader->setUniform(
+			"u_shadow_maps",
+			shadow_FBOs[i].depth_texture,
+			2 + i
+		);
+		shader->setUniform("u_shadow_bias", shadow_bias);
+		shader->setMatrix44("u_shadow_vps", shadow_vps[i]);
+		shader->setUniform("u_shadow_bias", shadow_bias);
+		// Upload time, for cool shader effects
+		float t = getTime();
+		shader->setUniform("u_time", t);
+
+		shader->setTexture("u_gbuffer_color", gbuffer_FBO.color_textures[0], 0);
+		shader->setTexture("u_gbuffer_normal", gbuffer_FBO.color_textures[1], 1);
+		shader->setTexture("u_gbuffer_depth", gbuffer_FBO.depth_texture, 2);
+
+		//Send inverse size of screen
+		shader->setUniform("u_inv_screen_size", Vector2f(1.0f / gbuffer_FBO.width, 1.0f / gbuffer_FBO.height));
+		camera->viewprojection_matrix.inverse();
+		shader->setUniform("u_inv_viewprojection", camera->viewprojection_matrix);
+		camera->viewprojection_matrix.inverse();
+
+		if (render_wireframe) glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+		sphereforrender.render(GL_TRIANGLES);
+		
+	}
+	shader->disable();
+	lighting_FBO.unbind();
+	lighting_FBO.color_textures[0]->toViewport();
+	glDepthMask(GL_TRUE);
+	glDepthFunc(GL_LESS);
+
+	
+	glFrontFace(GL_CCW);
+	glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+	
+	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+	glDisable(GL_BLEND);
+	glEnable(GL_DEPTH_TEST);
+	
+	glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+
+
 
 }
 
@@ -787,6 +954,7 @@ void Renderer::renderMeshwithTexture(const Matrix44 model, GFX::Mesh* mesh, SCN:
 	GFX::Shader* shader = NULL;
 	Camera* camera = Camera::current;
 	glEnable(GL_DEPTH_TEST);
+
 	//chose a shader
 	shader = GFX::Shader::Get("texture");
 	assert(glGetError() == GL_NO_ERROR);
@@ -799,6 +967,8 @@ void Renderer::renderMeshwithTexture(const Matrix44 model, GFX::Mesh* mesh, SCN:
 	material->bind(shader);
 	//upload uniforms
 	shader->setUniform("u_model", model);
+	bool is_dithered_transparent = material->alpha_cutoff < 0.6f && material->alpha_cutoff > 0.0f && ditering;
+	shader->setUniform("u_transparent", is_dithered_transparent);
 	// Upload camera uniforms
 	shader->setUniform("u_viewprojection", camera->viewprojection_matrix);
 	shader->setUniform("u_camera_position", camera->eye);
@@ -924,6 +1094,22 @@ void Renderer::renderTexture(const Camera& C,
 
 }
 
+void Renderer::createSpheresOfLights(std::vector<SCN::LightEntity*> lights) {
+
+	for (int i = 0; i < lights.size(); i++) {
+		if (lights[i]->light_type == eLightType::POINT) {
+			sDrawCommand draw_com;
+			GFX::Mesh* sphere = new GFX::Mesh();
+			sphere->GFX::Mesh::createSphere(lights[i]->max_distance, 10, 10);
+			draw_com.model = lights[i]->root.global_model;
+			draw_com.mesh = sphere;
+			Material* mat = new Material();
+			mat->color = vec4(lights[i]->color,1.0);
+			draw_com.material = mat;
+			draw_command_list.push_back(draw_com);
+		}
+	}
+}
 #else
 void Renderer::showUI() {}
 #endif
