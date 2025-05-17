@@ -90,6 +90,8 @@ void Material::bind(GFX::Shader* shader) {
 		//	texture = occlusion_texture;
 		// ==========================
 
+		GFX::Texture* metallic_roughness_texture = textures[SCN::eTextureChannel::METALLIC_ROUGHNESS].texture;
+
 		// We always force a default albedo texture
 
 		GFX::Texture* normal_map = textures[SCN::eTextureChannel::NORMALMAP].texture;
@@ -112,6 +114,10 @@ void Material::bind(GFX::Shader* shader) {
 		// Bind the normal map texture to the shader (unit 1)
 		if (normal_map) {
 			shader->setUniform("u_texture_normal", normal_map, 1);
+		}
+		// Bind the metallic-roughness texture to the shader
+		if (metallic_roughness_texture) {
+			shader->setUniform("u_texture_metallic_roughness", metallic_roughness_texture, 2);
 		}
 
 		// Set the alpha cutoff value based on alpha mode
