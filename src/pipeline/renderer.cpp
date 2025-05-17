@@ -43,6 +43,7 @@ bool use_multipass = false;
 bool use_deferred_rendering = false; // Assignment 4
 bool ditering = false;
 bool compress_normals = false; // Assignment 4
+bool brdf = false; // Assignment 5
 
 // Minimum alpha value to consider a pixel visible (used for alpha testing)
 float alpha_cutoff = 0;
@@ -349,7 +350,12 @@ void Renderer::renderMeshWithMaterial(const Matrix44 model, GFX::Mesh* mesh, SCN
 	glEnable(GL_DEPTH_TEST);
 
 	//chose a shader
-	shader = GFX::Shader::Get("phong");
+	if (brdf) {
+		shader = GFX::Shader::Get("brdf");
+	}
+	else {
+		shader = GFX::Shader::Get("phong");
+	}
 	assert(glGetError() == GL_NO_ERROR);
 
 	//no shader? then nothing to render
@@ -590,6 +596,9 @@ void Renderer::renderQuadWithGFBO(const Matrix44 model, GFX::Mesh* mesh, SCN::Ma
 	shader->setUniform("u_time", t);
 	shader->setUniform("u_compressnormals", compress_normals);
 
+	//To use bdrf or not
+	shader->setUniform("u_brdf", brdf);
+
 	// Prepare light information
 	const int MAX_LIGHTS = 100;
 	int numLights = std::min<int>(static_cast<int>(lights.size()), MAX_LIGHTS);
@@ -713,6 +722,8 @@ void Renderer::showUI()
 	ImGui::Checkbox("Deferred Rendering", &use_deferred_rendering);
 	ImGui::Checkbox("Ditering", &ditering);
 	ImGui::Checkbox("Compress Normals", &compress_normals);
+
+	ImGui::Checkbox("BRDF", &brdf);
 
 	// Slider to adjust the shadow bias
 	ImGui::SliderFloat("Shadow bias", &shadow_bias, 0.0f, 0.1f);
@@ -977,6 +988,8 @@ void Renderer::renderMeshwithTexture(const Matrix44 model, GFX::Mesh* mesh, SCN:
 	shader->setUniform("u_camera_position", camera->eye);
 	shader->setUniform("u_alpha_cutoff", alpha_cutoff);
 	shader->setUniform("u_compressnormals", compress_normals);
+	shader->setUniform("u_roughness", material->roughness_factor);
+	shader->setUniform("u_metallic", material->metallic_factor);
 	mesh->render(GL_TRIANGLES);
 	shader->disable();
 }
