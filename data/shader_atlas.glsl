@@ -876,11 +876,11 @@ vec3 perturbNormal(vec3 N, vec3 WP, vec2 uv, vec3 normal_pixel)
 	return normalize(TBN * normal_pixel);
 }
 
-vec3 toLinear(vec3 c) {
+vec3 degamma(vec3 c) {
     return pow(c, vec3(2.2));
 }
 
-vec3 toGamma(vec3 c) {
+vec3 gamma(vec3 c) {
     return pow(c, vec3(1.0 / 2.2));
 }
 
@@ -936,7 +936,7 @@ void main() {
 
 	float alpha = colorNL.a;
 
-	vec3 color = toLinear(colorNL.rgb);
+	vec3 color = degamma(colorNL.rgb);
 
 	// Discard the fragment if its alpha is below the cutoff (transparent)
     if (alpha < u_alpha_cutoff)
@@ -967,7 +967,7 @@ void main() {
 	// Loop through all lights and calculate their contribution
     for (int i = 0; i < u_numLights; i++) {
 
-		vec3 light_color = toLinear(u_light_color[i]);
+		vec3 light_color = degamma(u_light_color[i]);
 
         float shadow_factor = 1.0; // Default: no shadow
 
@@ -1050,7 +1050,7 @@ void main() {
 
 	// Final color calculation with ambient, diffuse, and specular components
 	vec3 final_color = ambient + (diffuse_total + specular_total);
-    FragColor = vec4(toGamma(final_color), alpha);
+    FragColor = vec4(gamma(final_color), alpha);
 	NormalColor = vec4(v_normal * 0.5 + 0.5,1.0); // Store normal in NormalColor for debugging
 }
 

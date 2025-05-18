@@ -131,7 +131,7 @@ Renderer::Renderer(const char* shader_atlas_filename)
 	gbuffer_FBO.create(1024, 768,
 		2, // Create two texture to render to
 		GL_RGBA, // Each texture has an R G B and A channels
-		GL_UNSIGNED_BYTE, // Uses 8 bits per channel
+		GL_HALF_FLOAT, // Uses 8 bits per channel
 		true); 
 	lighting_FBO.create(1024, 768,
 		1, // Create one texture to render to
