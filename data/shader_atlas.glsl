@@ -1283,11 +1283,11 @@ layout(location = 0) out vec4 FragColor;
 uniform sampler2D u_depth_tex;    // depth buffer (0..1)
 uniform sampler2D u_normal_tex;   // normal buffer (encoded 0..1)
 
-// Noise texture para rotar muestras por fragmento
+// Noise texture to rotate samples per fragment
 uniform sampler2D u_noise_tex;
 uniform vec2     u_noise_scale;   // = screenSize / noiseSize
 
-// Resolución inversa
+// Inverse resolution (1 / screenSize)
 uniform vec2     u_res_inv;
 
 // SSAO params
@@ -1296,14 +1296,14 @@ uniform float    u_sample_radius;
 uniform float    u_ssao_bias;
 uniform bool     u_use_ssao_plus;
 
-// Matrices de cámara
+// Camera matrices
 uniform mat4     u_p_mat;
 uniform mat4     u_inv_p_mat;
 
-// Puntos en esfera generados en CPU (radio = 1.0)
+// Sample points in sphere or hemisphere (radius = 1.0)
 uniform vec3     u_sample_pos[64];
 
-// Reconstruye coordenada de vista z desde depth
+// Reconstruct view-space Z from depth buffer
 float reconstructDepth(vec2 uv) {
     float z = texture(u_depth_tex, uv).r;
     float z_ndc = z * 2.0 - 1.0;
@@ -1312,7 +1312,7 @@ float reconstructDepth(vec2 uv) {
     return view.z / view.w;
 }
 
-// Reconstruye posición en view-space
+// Reconstruct full view-space position
 vec3 reconstructViewPos(vec2 uv) {
     float z = texture(u_depth_tex, uv).r;
     float z_ndc = z * 2.0 - 1.0;
@@ -1322,15 +1322,17 @@ vec3 reconstructViewPos(vec2 uv) {
 }
 
 void main() {
-    // posición y normal en view-space
-    vec3 P = reconstructViewPos(v_uv);
-    vec3 N = texture(u_normal_tex, v_uv).rgb * 2.0 - 1.0;
+    // center UV to the texel center
+    vec2 uv = v_uv + 0.5 * u_res_inv;
 
-    // genera TBN si SSAO+
+    // view-space position and normal
+    vec3 P = reconstructViewPos(uv);
+    vec3 N = texture(u_normal_tex, uv).rgb * 2.0 - 1.0;
+
+    // build TBN if using SSAO+
     mat3 TBN = mat3(1.0);
     if (u_use_ssao_plus) {
-        // ruido para rotar el espacio
-        vec3 rand = texture(u_noise_tex, v_uv * u_noise_scale).xyz * 2.0 - 1.0;
+        vec3 rand = texture(u_noise_tex, uv * u_noise_scale).xyz * 2.0 - 1.0;
         vec3 tangent = normalize(rand - N * dot(rand, N));
         vec3 bitan   = cross(N, tangent);
         TBN = mat3(tangent, bitan, N);
@@ -1338,29 +1340,30 @@ void main() {
 
     float occlusion = 0.0;
     for (int i = 0; i < u_sample_count; ++i) {
-        // punto en hemisferio
         vec3 samp = u_sample_pos[i];
-        if (u_use_ssao_plus)
+        if (u_use_ssao_plus) {
             samp = TBN * samp;
+        }
 
         vec3 samplePos = P + samp * u_sample_radius;
 
-        // projección para leer depth
+        // project sample position
         vec4 proj = u_p_mat * vec4(samplePos, 1.0);
         proj.xyz /= proj.w;
         vec2 uvSample = proj.xy * 0.5 + 0.5;
 
-        // descarta fuera de pantalla
+        // skip samples outside the screen
         if (uvSample.x < 0.0 || uvSample.x > 1.0 ||
             uvSample.y < 0.0 || uvSample.y > 1.0)
             continue;
 
         float sampleDepth = reconstructDepth(uvSample);
-        // bias para evitar self-occlusion
+        // accumulate occlusion
         if (sampleDepth + u_ssao_bias < samplePos.z)
             occlusion += 1.0;
     }
 
-    occlusion = (occlusion / float(u_sample_count));
+    // normalize and output
+    occlusion /= float(u_sample_count);
     FragColor = vec4(vec3(occlusion), 1.0);
 }
