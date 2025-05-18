@@ -10,6 +10,7 @@ phong basic.vs phong.fs
 quad quad.vs quad.fs
 light_volume basic.vs phong_sphere.fs
 brdf basic.vs brdf.fs
+ssao quad.vs ssao.fs
 
 
 
@@ -1272,3 +1273,94 @@ void main() {
     FragColor = vec4(light_specular + light_diffuse, color.a);
 }
 
+\ssao.fs
+#version 330 core
+
+in vec2 v_uv;
+layout(location = 0) out vec4 FragColor;
+
+// G-buffer inputs
+uniform sampler2D u_depth_tex;    // depth buffer (0..1)
+uniform sampler2D u_normal_tex;   // normal buffer (encoded 0..1)
+
+// Noise texture para rotar muestras por fragmento
+uniform sampler2D u_noise_tex;
+uniform vec2     u_noise_scale;   // = screenSize / noiseSize
+
+// Resolución inversa
+uniform vec2     u_res_inv;
+
+// SSAO params
+uniform int      u_sample_count;
+uniform float    u_sample_radius;
+uniform float    u_ssao_bias;
+uniform bool     u_use_ssao_plus;
+
+// Matrices de cámara
+uniform mat4     u_p_mat;
+uniform mat4     u_inv_p_mat;
+
+// Puntos en esfera generados en CPU (radio = 1.0)
+uniform vec3     u_sample_pos[64];
+
+// Reconstruye coordenada de vista z desde depth
+float reconstructDepth(vec2 uv) {
+    float z = texture(u_depth_tex, uv).r;
+    float z_ndc = z * 2.0 - 1.0;
+    vec4 clip = vec4(uv * 2.0 - 1.0, z_ndc, 1.0);
+    vec4 view = u_inv_p_mat * clip;
+    return view.z / view.w;
+}
+
+// Reconstruye posición en view-space
+vec3 reconstructViewPos(vec2 uv) {
+    float z = texture(u_depth_tex, uv).r;
+    float z_ndc = z * 2.0 - 1.0;
+    vec4 clip = vec4(uv * 2.0 - 1.0, z_ndc, 1.0);
+    vec4 view = u_inv_p_mat * clip;
+    return view.xyz / view.w;
+}
+
+void main() {
+    // posición y normal en view-space
+    vec3 P = reconstructViewPos(v_uv);
+    vec3 N = texture(u_normal_tex, v_uv).rgb * 2.0 - 1.0;
+
+    // genera TBN si SSAO+
+    mat3 TBN = mat3(1.0);
+    if (u_use_ssao_plus) {
+        // ruido para rotar el espacio
+        vec3 rand = texture(u_noise_tex, v_uv * u_noise_scale).xyz * 2.0 - 1.0;
+        vec3 tangent = normalize(rand - N * dot(rand, N));
+        vec3 bitan   = cross(N, tangent);
+        TBN = mat3(tangent, bitan, N);
+    }
+
+    float occlusion = 0.0;
+    for (int i = 0; i < u_sample_count; ++i) {
+        // punto en hemisferio
+        vec3 samp = u_sample_pos[i];
+        if (u_use_ssao_plus)
+            samp = TBN * samp;
+
+        vec3 samplePos = P + samp * u_sample_radius;
+
+        // projección para leer depth
+        vec4 proj = u_p_mat * vec4(samplePos, 1.0);
+        proj.xyz /= proj.w;
+        vec2 uvSample = proj.xy * 0.5 + 0.5;
+
+        // descarta fuera de pantalla
+        if (uvSample.x < 0.0 || uvSample.x > 1.0 ||
+            uvSample.y < 0.0 || uvSample.y > 1.0)
+            continue;
+
+        float sampleDepth = reconstructDepth(uvSample);
+        // bias para evitar self-occlusion
+        if (sampleDepth + u_ssao_bias < samplePos.z)
+            occlusion += 1.0;
+    }
+
+    occlusion = (occlusion / float(u_sample_count));
+    FragColor = vec4(vec3(occlusion), 1.0);
+}

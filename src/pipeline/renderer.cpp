@@ -68,7 +68,39 @@ GFX::FBO gbuffer_FBO;
 //Store the FBO for lighting pass
 GFX::FBO lighting_FBO;
 
+// Assignment 6 – SSAO FBO
+GFX::FBO ssao_FBO;
+
+// SSAO shader
+GFX::Shader* ssao_shader = nullptr;
+
+
+
 Camera lightCam; // Assignment 3
+
+// Genera puntos en esfera o hemisferio con radio dado
+static std::vector<Vector3f> generateSpherePoints(int num, float radius, bool hemi) {
+	std::vector<Vector3f> points;
+	points.resize(num);
+	for (int i = 0; i < num; i += 1) {
+		Vector3f& p = points[i];
+		float u = random();
+		float v = random();
+		float theta = u * 2.0f * PI;
+		float phi = acos(2.0f * v - 1.0f);
+		float r = cbrt(random() * 0.9f + 0.1f) * radius;
+		float sinTheta = sin(theta);
+		float cosTheta = cos(theta);
+		float sinPhi = sin(phi);
+		float cosPhi = cos(phi);
+		p.x = r * sinPhi * cosTheta;
+		p.y = r * sinPhi * sinTheta;
+		p.z = r * cosPhi;
+		if (hemi && p.z < 0)
+			p.z *= -1.0f;
+	}
+	return points;
+}
 
 Renderer::Renderer(const char* shader_atlas_filename)
 {
@@ -80,6 +112,12 @@ Renderer::Renderer(const char* shader_atlas_filename)
 	if (!GFX::Shader::LoadAtlas(shader_atlas_filename))
 		exit(1);
 	GFX::checkGLErrors();
+
+	ssao_shader = GFX::Shader::Get("ssao");
+	if (!ssao_shader) {
+		std::cerr << "Error: no se pudo cargar el shader ssao\n";
+		exit(1);
+	}
 
 	sphere.createSphere(1.0f);
 	sphere.uploadToVRAM();
@@ -100,7 +138,16 @@ Renderer::Renderer(const char* shader_atlas_filename)
 		GL_RGBA, // Each texture has an R G B and A channels
 		GL_FLOAT, // Uses 8 bits per channel, we have to try more
 		true); 
-
+	// SSAO FBO (solo un canal, puedes hacerlo a mitad de resolución si quieres)
+	ssao_FBO.create(
+		gbuffer_FBO.width,                   // ancho del FBO
+		gbuffer_FBO.height,                  // alto del FBO
+		1,                                   // solo una textura
+		GL_RGB,                              // canal único R
+		GL_UNSIGNED_BYTE,                    // 8 bits, suficiente para AO
+		false                                // sin depth buffer
+	);
+	ssao_kernel = generateSpherePoints(ssao_sample_count, 1.0f, false);
 
 }
 
@@ -113,6 +160,9 @@ void Renderer::setupScene()
 }
 
 void Renderer::orderNodes(Camera* cam) {
+
+	opaqueNodes.clear();
+	transparentNodes.clear();
 
 	// Separate draw commands based on their material alpha mode
 	for (sDrawCommand command : draw_command_list) {
@@ -237,6 +287,13 @@ void Renderer::renderScene(SCN::Scene* scene, Camera* camera)
 	rendertoGFBO(); // Assignment 4, takes color and normal from scene to texture
 
 	
+	if (use_ssao) {
+		renderSSAO(camera);
+		ssao_FBO.color_textures[0]->toViewport();
+		// opcional: un blur o upsample aquí si implementas 2.6
+		return;
+	}
+
 
 	//set the clear color (the background color)
 	glClearColor(scene->background_color.x, scene->background_color.y, scene->background_color.z, 1.0);
@@ -734,6 +791,30 @@ void Renderer::showUI()
 	// Slider to adjust the alpha cutoff for transparency-based rendering
 	ImGui::SliderFloat("Alpha Cutoff", &alpha_cutoff, 0.0f, 1.0f);
 
+	ImGui::Separator();
+	ImGui::Checkbox("SSAO", &use_ssao);
+	if (use_ssao) {
+		// Guardamos los valores anteriores
+		static int  prev_samples = ssao_sample_count;
+		static bool prev_plus = use_ssao_plus;
+
+		// Dibujamos los controles
+		ImGui::SliderInt("SSAO Samples", &ssao_sample_count, 1, 64);
+		ImGui::SliderFloat("SSAO Radius", &ssao_radius, 0.0f, 0.2f, "%.3f");
+		ImGui::Checkbox("SSAO+", &use_ssao_plus);
+
+		// Si cambió el número de muestras o el modo, regeneramos el kernel
+		if (ssao_sample_count != prev_samples || use_ssao_plus != prev_plus) {
+			ssao_kernel = generateSpherePoints(
+				ssao_sample_count,      // nueva cuenta de muestras
+				1.0f,                   // radio fijo en CPU
+				use_ssao_plus           // hemisferio si “+” está activo
+			);
+			prev_samples = ssao_sample_count;
+			prev_plus = use_ssao_plus;
+		}
+	}
+
 	// If a prefab entity is selected, show shininess sliders for that prefab
 	if (SCN::BaseEntity::s_selected && SCN::BaseEntity::s_selected->getType() == SCN::eEntityType::PREFAB)
 	{
@@ -804,8 +885,7 @@ Camera Renderer::configureLightCamera(int idx) {
 
 // Assigment 4
 void Renderer::rendertoGFBO() {
-	if (lights.empty())
-		return;
+
 	// Save the original OpenGL state
 	GLint old_viewport[4];
 	glGetIntegerv(GL_VIEWPORT, old_viewport);
@@ -820,8 +900,8 @@ void Renderer::rendertoGFBO() {
 		renderMeshwithTexture(cmd.model, cmd.mesh, cmd.material);
 	
 
-	for (sDrawCommand& cmd : transparentNodes)
-		renderMeshwithTexture(cmd.model, cmd.mesh, cmd.material);
+	//for (sDrawCommand& cmd : transparentNodes)
+		//renderMeshwithTexture(cmd.model, cmd.mesh, cmd.material);
 
 
 	gbuffer_FBO.unbind();
@@ -1057,6 +1137,42 @@ void Renderer::renderToShadowMap() {
 	glDrawBuffer(old_draw_buf);
 }
 
+void Renderer::renderSSAO(Camera* camera) {
+
+	ssao_FBO.bind();
+	glViewport(0, 0, ssao_FBO.width, ssao_FBO.height);
+
+	glClearColor(0, 0, 0, 1);
+	glClear(GL_COLOR_BUFFER_BIT);
+
+	ssao_shader->enable();
+	ssao_shader->setTexture("u_normal_tex", gbuffer_FBO.color_textures[1], 1);
+	ssao_shader->setUniform("u_use_ssao_plus", use_ssao_plus ? 1 : 0);
+
+
+	ssao_shader->setTexture("u_depth_tex", gbuffer_FBO.depth_texture, 0);
+	ssao_shader->setUniform("u_res_inv", Vector2f(1.0f / ssao_FBO.width, 1.0f / ssao_FBO.height));
+	ssao_shader->setUniform("u_sample_count", ssao_sample_count);
+	ssao_shader->setUniform("u_sample_radius", ssao_radius);
+	ssao_shader->setUniform3Array("u_sample_pos",
+		reinterpret_cast<float*>(ssao_kernel.data()),
+		ssao_sample_count);
+	ssao_shader->setUniform("u_p_mat", camera->projection_matrix);
+	Matrix44 invP = camera->projection_matrix; invP.inverse();
+	ssao_shader->setUniform("u_inv_p_mat", invP);
+
+	glDisable(GL_DEPTH_TEST);
+	GFX::Mesh* quad = GFX::Mesh::getQuad();
+	quad->render(GL_TRIANGLES);
+	glEnable(GL_DEPTH_TEST);
+
+	// 7) cleanup
+	ssao_shader->disable();
+	ssao_FBO.unbind();
+
+}
+
+
 void Renderer::renderPlain(const Camera& C,
 	const Matrix44& model,
 	GFX::Mesh* mesh,
@@ -1127,6 +1243,10 @@ void Renderer::createSpheresOfLights(std::vector<SCN::LightEntity*> lights) {
 		}
 	}
 }
+
+
+
+
 #else
 void Renderer::showUI() {}
 #endif

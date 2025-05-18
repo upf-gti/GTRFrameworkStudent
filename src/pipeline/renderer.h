@@ -26,7 +26,18 @@ namespace SCN {
 		bool render_wireframe;
 		bool render_boundaries;
 
+		// SSAO parameters
+		bool use_ssao = false;              // Toggle SSAO on/off
+		int ssao_sample_count = 32;         // Nº muestras (1–64)
+		float ssao_radius = 0.05f;          // Radio de muestreo (0.0–0.2)
+		bool use_ssao_plus = false;         // Toggle SSAO+ (hemisferio) on/off
+
+		// SSAO kernel
+		std::vector<Vector3f> ssao_kernel;
+
+
 		GFX::Texture* skybox_cubemap;
+
 
 		SCN::Scene* scene;
 
@@ -70,6 +81,8 @@ namespace SCN {
 		void rendertoLightFBO(); //Assignment 4 to accumulate lighting
 
 		void createSpheresOfLights(std::vector<SCN::LightEntity*> lights); //assigment 4
+
+		void renderSSAO(Camera* camera); //Assignment 6
 
 		void renderPlain(const Camera& lightCam,
 			const Matrix44& model,
