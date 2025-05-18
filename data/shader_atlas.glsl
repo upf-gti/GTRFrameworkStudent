@@ -918,6 +918,9 @@ out vec4 FragColor; // Final color output
    // color buffer
 layout(location = 1) out vec4 NormalColor;  // normal buffer
 
+// SSAO Texture
+uniform sampler2D u_ssao_tex;
+
 void main() {
     // Get the base color
     vec4 tex_color = texture(u_texture, v_uv);
@@ -931,11 +934,14 @@ void main() {
 
 	// Store base color for gFBO
 
+	float ao = texture(u_ssao_tex, v_uv).r;
+
     // Ambient term calculation
     vec3 ambient = vec3(0.0);
 	if (u_apply_ambient) {
-		ambient = u_ambient_light * base_color;
+		ambient = u_ambient_light * base_color * ao;
 	}
+
 
 	// Initialize lighting accumulators
     vec3 diffuse_total = vec3(0.0);
