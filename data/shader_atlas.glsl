@@ -876,6 +876,14 @@ vec3 perturbNormal(vec3 N, vec3 WP, vec2 uv, vec3 normal_pixel)
 	return normalize(TBN * normal_pixel);
 }
 
+vec3 toLinear(vec3 c) {
+    return pow(c, vec3(2.2));
+}
+
+vec3 toGamma(vec3 c) {
+    return pow(c, vec3(1.0 / 2.2));
+}
+
 // Inputs from vertex shader
 in vec3 v_world_position;
 in vec3 v_normal;
@@ -924,10 +932,14 @@ uniform sampler2D u_ssao_tex;
 void main() {
     // Get the base color
     vec4 tex_color = texture(u_texture, v_uv);
-    vec4 color = tex_color * u_color;
+    vec4 colorNL = tex_color * u_color;
+
+	float alpha = colorNL.a;
+
+	vec3 color = toLinear(colorNL.rgb);
 
 	// Discard the fragment if its alpha is below the cutoff (transparent)
-    if (color.a < u_alpha_cutoff)
+    if (alpha < u_alpha_cutoff)
         discard;
 
     vec3 base_color = color.rgb;
@@ -954,6 +966,8 @@ void main() {
 
 	// Loop through all lights and calculate their contribution
     for (int i = 0; i < u_numLights; i++) {
+
+		vec3 light_color = toLinear(u_light_color[i]);
 
         float shadow_factor = 1.0; // Default: no shadow
 
@@ -1019,8 +1033,8 @@ void main() {
 		float R_dot_V = clamp(dot(R, V), 0.0, 1.0); // View reflection term
 
 		// Diffuse and specular lighting contributions
-		vec3 light_diffuse = base_color * N_dot_L * u_light_color[i] * u_light_intensity[i] * attenuation;
-		vec3 light_specular = base_color * u_light_color[i] * u_light_intensity[i] * attenuation * pow(R_dot_V, u_shininess);
+		vec3 light_diffuse = base_color * N_dot_L * light_color * u_light_intensity[i] * attenuation;
+		vec3 light_specular = base_color * light_color * u_light_intensity[i] * attenuation * pow(R_dot_V, u_shininess);
 
 		// Apply shadow factor to light if shadow exists
 		if (i < u_numShadowCasters &&(u_light_type[i]==1 || u_light_type[i]==2) ){
@@ -1036,7 +1050,7 @@ void main() {
 
 	// Final color calculation with ambient, diffuse, and specular components
 	vec3 final_color = ambient + (diffuse_total + specular_total);
-    FragColor = vec4(final_color, color.a);
+    FragColor = vec4(toGamma(final_color), alpha);
 	NormalColor = vec4(v_normal * 0.5 + 0.5,1.0); // Store normal in NormalColor for debugging
 }
 
@@ -1114,7 +1128,7 @@ uniform sampler2D u_texture_normal;
 
 // Light info
 
-uniform vec3 u_light_pos;
+uniform vec3 u_light_pos; 
 uniform vec3 u_light_color;	
 uniform float u_light_intensity;
 uniform int u_light_type; // 0 = point, 1 = directional, 2 = spotlight
