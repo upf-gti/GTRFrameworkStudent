@@ -1431,7 +1431,7 @@ void BufferObject::bind(Shader* shader, int index, int start, int length)
 {
 	assert(size);
 	if (shader && name.size())
-	{
+	{	
 		int loc = shader->getLocation(name.c_str(), true);
 		if(loc != -1)
 			glUniformBlockBinding( shader->program, loc, index );

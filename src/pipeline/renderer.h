@@ -26,9 +26,21 @@ namespace SCN {
 		bool render_wireframe;
 		bool render_boundaries;
 
+		// SSAO parameters
+		bool use_ssao = false;              // Toggle SSAO on/off
+		int ssao_sample_count = 32;         // Nº muestras (1–64)
+		float ssao_radius = 0.05f;          // Radio de muestreo (0.0–0.2)
+		bool use_ssao_plus = false;         // Toggle SSAO+ (hemisferio) on/off
+
+		// SSAO kernel
+		std::vector<Vector3f> ssao_kernel;
+
+
 		GFX::Texture* skybox_cubemap;
 
+
 		SCN::Scene* scene;
+
 
 		//updated every frame
 		Renderer(const char* shaders_atlas_filename );
@@ -38,6 +50,10 @@ namespace SCN {
 
 		//add here your functions
 		//...
+
+		void parseNodes(SCN::Node* node, Camera* cam);
+
+		void orderNodes(Camera* cam);
 
 		void parseSceneEntities(SCN::Scene* scene, Camera* camera);
 
@@ -49,6 +65,34 @@ namespace SCN {
 
 		//to render one mesh given its material and transformation matrix
 		void renderMeshWithMaterial(const Matrix44 model, GFX::Mesh* mesh, SCN::Material* material);
+
+		void renderQuadWithGFBO(const Matrix44 model, GFX::Mesh* mesh, SCN::Material* material, bool firstlightingpass);
+
+		void renderMeshwithTexture(const Matrix44 model, GFX::Mesh* mesh, SCN::Material* material);
+
+		void showShininessSliders(SCN::Node* node);//Assignment 2
+
+		Camera configureLightCamera(int index); //Assignment 3
+
+		void renderToShadowMap();  //Assignment 3
+
+		void rendertoGFBO(); //Assignment 4 takes data form scenen
+
+		void rendertoLightFBO(); //Assignment 4 to accumulate lighting
+
+		void createSpheresOfLights(std::vector<SCN::LightEntity*> lights); //assigment 4
+
+		void renderSSAO(Camera* camera); //Assignment 6
+
+		void renderPlain(const Camera& lightCam,
+			const Matrix44& model,
+			GFX::Mesh* mesh,
+			SCN::Material* material); //Assignment 3
+
+		void renderTexture(const Camera& lightCam,
+			const Matrix44& model,
+			GFX::Mesh* mesh,
+			SCN::Material* material); //Assignment 4
 
 		void showUI();
 	};
