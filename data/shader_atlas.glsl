@@ -850,7 +850,6 @@ void main()
 #define MAX_LIGHTS 100
 #define MAX_SHADOW_CASTERS 4
 
-
 mat3 cotangentFrame(vec3 N, vec3 p, vec2 uv) {
   // get edge vectors of the pixel triangle
   vec3 dp1 = dFdx(p);
@@ -876,12 +875,23 @@ vec3 perturbNormal(vec3 N, vec3 WP, vec2 uv, vec3 normal_pixel)
 	return normalize(TBN * normal_pixel);
 }
 
+// Exercice 3.1
 vec3 degamma(vec3 c) {
     return pow(c, vec3(2.2));
 }
 
 vec3 gamma(vec3 c) {
     return pow(c, vec3(1.0 / 2.2));
+}
+
+// Exercice 3.3
+vec3 tonemapACES(vec3 x) {
+    const float a = 2.51;
+    const float b = 0.03;
+    const float c = 2.43;
+    const float d = 0.59;
+    const float e = 0.14;
+    return clamp((x*(a*x+b))/(x*(c*x+d)+e), 0.0, 1.0);
 }
 
 // Inputs from vertex shader
@@ -1050,7 +1060,8 @@ void main() {
 
 	// Final color calculation with ambient, diffuse, and specular components
 	vec3 final_color = ambient + (diffuse_total + specular_total);
-    FragColor = vec4(gamma(final_color), alpha);
+	vec3 final_color_tonemapped = tonemapACES(final_color);
+    FragColor = vec4(gamma(final_color_tonemapped), alpha);
 	NormalColor = vec4(v_normal * 0.5 + 0.5,1.0); // Store normal in NormalColor for debugging
 }
 
