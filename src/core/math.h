@@ -429,4 +429,6 @@ typedef Vector4f vec4;
 typedef Matrix44 mat4;
 typedef Quaternion quat;
 
+
+std::vector<Vector3f> generateSpherePoints(int num, float radius, bool hemi);
 #endif

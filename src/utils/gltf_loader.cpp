@@ -311,7 +311,7 @@ std::vector<GFX::Mesh*> parseGLTFMesh(cgltf_mesh* meshdata, const char* basename
 			if (attr->type == cgltf_attribute_type_texcoord)
 			{
 				if (strcmp(attr->name,"TEXCOORD_1") == 0) //secondary UV set
-					parseGLTFBufferVector2(mesh->m_uvs1, attr->data);
+					parseGLTFBufferVector2(mesh->uvs1, attr->data);
 				else
 					parseGLTFBufferVector2(mesh->uvs, attr->data);
 			}
@@ -332,7 +332,7 @@ std::vector<GFX::Mesh*> parseGLTFMesh(cgltf_mesh* meshdata, const char* basename
 			}
 
 			if (primitive->indices && primitive->indices->count)
-				parseGLTFBufferIndices(mesh->m_indices, primitive->indices);
+				parseGLTFBufferIndices(mesh->indices, primitive->indices);
 		}
 		mesh->uploadToVRAM();
 		if (meshdata->name)

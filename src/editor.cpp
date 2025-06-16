@@ -538,13 +538,13 @@ void SceneEditor::inspectObject(Camera* camera)
 	bool changed = false;
 	changed |= ImGui::Combo("Type", (int*)&camera->type, "PERSPECTIVE\0ORTHOGRAPHIC", 2);
 	if (changed && camera->type == Camera::ORTHOGRAPHIC)
-		camera->setOrthographic(-200, 200, -200 / camera->aspect, 200 / camera->aspect, 0.1, 10000);
+		camera->setOrthographic(-200, 200, -200 / camera->aspect, 200 / camera->aspect, 0.1, 1000);
 	changed |= ImGui::SliderFloat3("Eye", &camera->eye.x, -100, 100);
 	changed |= ImGui::SliderFloat3("Center", &camera->center.x, -100, 100);
 	changed |= ImGui::SliderFloat3("Up", &camera->up.x, -100, 100);
 	changed |= ImGui::SliderFloat("FOV", &camera->fov, 15, 180);
 	changed |= ImGui::SliderFloat("Near", &camera->near_plane, 0.01, camera->far_plane);
-	changed |= ImGui::SliderFloat("Far", &camera->far_plane, camera->near_plane, 10000);
+	changed |= ImGui::SliderFloat("Far", &camera->far_plane, camera->near_plane, 1000);
 	if (changed)
 		camera->lookAt(camera->eye, camera->center, camera->up);
 #endif

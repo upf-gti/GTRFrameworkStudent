@@ -18,6 +18,7 @@ long getTime(); //there is also CORE::getTime
 bool readFile(const std::string& filename, std::string& content);
 bool readFileBin(const std::string& filename, std::vector<unsigned char>& buffer);
 bool writeFile(const std::string& filename, std::string& content);
+std::string getRelativePath(std::string path);
 
 //work with file paths
 std::string getFolderName(std::string path);

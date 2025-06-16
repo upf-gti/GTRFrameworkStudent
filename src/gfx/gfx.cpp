@@ -46,7 +46,8 @@ namespace GFX {
 	bool checkGLErrors()
 	{
 #ifndef _DEBUG
-		return true;
+		//TODO(Juan): this should be changed for mac os
+		//return true;
 #endif
 
 		GLenum errCode;
@@ -56,6 +57,8 @@ namespace GFX {
 #ifndef GCC
 			errString = gluErrorString(errCode);
 			std::cerr << "OpenGL Error: " << (errString ? (const char*)errString : "NO ERROR STRING") << std::endl;
+#else
+			std::cout << "OpenGL Error: " << errCode << std::endl;
 #endif
 			assert(0);
 			return false;
@@ -105,6 +108,10 @@ namespace GFX {
 
 	bool drawText(float x, float y, std::string text, Vector4f c, float scale)
 	{
+#ifdef __APPLE__
+		// TODO(Juan): RESTORE THIS ON MAC OS
+		return true;
+#endif
 		static char buffer[99999]; // ~500 chars
 		int num_quads;
 

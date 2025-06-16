@@ -10,7 +10,6 @@
 
 #ifdef WIN32
 	#include <Commdlg.h>
-	#include <atlstr.h>
 	#include <windows.h> //time
 #else
 	#include <sys/time.h>
@@ -65,11 +64,9 @@ CORE::Window* CORE::createWindow(const char* caption, int width, int height, boo
 	SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
 	SDL_GL_SetAttribute(SDL_GL_STENCIL_SIZE, 8);
 
-#ifndef __APPLE__
 	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, OPENGL_VERSION_MAJOR);
 	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, OPENGL_VERSION_MINOR);
-	SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_COMPATIBILITY);
-#endif
+	SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
 
 	//antialiasing (disable this lines if it goes too slow)
 	SDL_GL_SetAttribute(SDL_GL_MULTISAMPLEBUFFERS, 1);
@@ -92,6 +89,9 @@ CORE::Window* CORE::createWindow(const char* caption, int width, int height, boo
 	// Create an OpenGL context associated with the window.
 	glcontext = SDL_GL_CreateContext(sdl_window);
 	SDL_GL_MakeCurrent(sdl_window, glcontext);
+
+	// Enable Vsync
+	SDL_GL_SetSwapInterval(1);
 
 	//in case of exit, call SDL_Quit()
 	atexit(SDL_Quit);
@@ -142,7 +142,7 @@ void CORE::initUI()
 	IMGUI_CHECKVERSION();
 	ImGui::CreateContext();
 	// Setup Platform/Renderer bindings
-	const char* glsl_version = "#version 430";
+	const char* glsl_version = "#version 330 core";
 	ImGui_ImplSDL3_InitForOpenGL(current_window, glcontext);
 	ImGui_ImplOpenGL3_Init(glsl_version);
 #endif

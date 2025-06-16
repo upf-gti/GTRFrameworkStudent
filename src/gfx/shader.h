@@ -77,6 +77,12 @@ namespace GFX {
 		void setUniform(const char* varname, std::vector<Matrix44>& m_vector) { assert(current == this && m_vector.size()); setMatrix44Array(varname, &m_vector[0], m_vector.size()); }
 
 		//for textures you must specify an slot (a number from 0 to 16) where this texture is stored in the shader
+		// If you call a texture withot one, it wil trigger this functions, instad of implicit casting to
+		// the other functions.
+		template <class T>
+		void setUniform(const char* varname, T a) {
+			static_assert(false, "Invalid parameter for uniform. If you are trying to set a texture, set a slot!");
+		}
 		void setUniform(const char* varname, Texture* texture, int slot) { assert(current == this); setTexture(varname, texture, slot); }
 
 

@@ -4,15 +4,34 @@ texture basic.vs texture.fs
 skybox basic.vs skybox.fs
 depth quad.vs depth.fs
 multi basic.vs multi.fs
-compute test.cs
 
-\test.cs
-#version 430 core
+\perturbNormal
 
-layout(local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
-void main() 
+mat3 cotangent_frame(vec3 N, vec3 p, vec2 uv)
 {
-	vec4 i = vec4(0.0);
+	// get edge vectors of the pixel triangle
+	vec3 dp1 = dFdx(p);
+	vec3 dp2 = dFdy(p);
+	vec2 duv1 = dFdx(uv);
+	vec2 duv2 = dFdy(uv);
+
+	// solve the linear system
+	vec3 dp2perp = cross(dp2, N);
+	vec3 dp1perp = cross(N, dp1);
+	vec3 T = dp2perp * duv1.x + dp1perp * duv2.x;
+	vec3 B = dp2perp * duv1.y + dp1perp * duv2.y;
+
+	// construct a scale-invariant frame 
+	float invmax = inversesqrt(max(dot(T, T), dot(B, B)));
+	return mat3(T * invmax, B * invmax, N);
+}
+
+// assume N, the interpolated vertex normal and 
+// WP the world position
+vec3 perturbNormal(vec3 N, vec3 WP, vec2 uv, vec3 normal_pixel)
+{
+	mat3 TBN = cotangent_frame(N, WP, uv);
+	return normalize(TBN * normal_pixel);
 }
 
 \basic.vs
@@ -181,7 +200,7 @@ void main()
 {
 	float n = u_camera_nearfar.x;
 	float f = u_camera_nearfar.y;
-	float z = texture2D(u_texture,v_uv).x;
+	float z = texture(u_texture,v_uv).x;
 	if( n == 0.0 && f == 1.0 )
 		FragColor = vec4(z);
 	else

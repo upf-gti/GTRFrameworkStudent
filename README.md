@@ -24,3 +24,19 @@ cmake ..
 ```
 
 This should generate you a Visual Studio Solution for the project.
+
+## Mac OS (Xcode)
+Building requirements are
+
+* [Xcode].
+* [CMake]. Install using Homebrew with the command ``brew install cmake``.
+
+Once you have all required open a Terminal, go to the project folder and do this steps:
+```console
+cd GTRFrameworkStudent
+mkdir build
+cd build
+cmake .. -G "Xcode"
+```
+
+This should generate you a Xcode project.
