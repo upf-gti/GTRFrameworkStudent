@@ -7,6 +7,7 @@ multi basic.vs multi.fs
 
 \perturbNormal
 
+// From https://github.com/glslify/glsl-perturb-normal/blob/master/cotangent-frame.glsl
 mat3 cotangent_frame(vec3 N, vec3 p, vec2 uv)
 {
 	// get edge vectors of the pixel triangle
