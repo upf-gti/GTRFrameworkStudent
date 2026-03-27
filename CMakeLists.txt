@@ -30,6 +30,13 @@ macro(GroupSources curdir)
     endif()
 endmacro()
 
+if (APPLE)
+    configure_file("${DIR_ROOT}/AGL_fix.patch" "${DIR_ROOT}/libraries/glew-cmake/AGL_fix.patch" COPYONLY)
+    message(STATUS "Applying AGL fix patch...")
+
+    execute_process( COMMAND bash "-c" "cd ${DIR_ROOT}/libraries/glew-cmake && git apply AGL_fix.patch")
+endif()
+
 # Directories
 set(DIR_ROOT       ${CMAKE_CURRENT_LIST_DIR})
 set(DIR_SOURCES    "${DIR_ROOT}/src")
@@ -113,12 +120,6 @@ if (APPLE)
     if (CMAKE_GENERATOR STREQUAL Xcode)
 	target_compile_definitions(${PROJECT_NAME} PUBLIC "XCODE_IDE")
     endif()
-
-    configure_file("${DIR_ROOT}/AGL_fix.patch" "${DIR_ROOT}/libraries/glew-cmake/AGL_fix.patch" COPYONLY)
-    message(STATUS "Applying AGL fix patch...")
-
-    execute_process( COMMAND bash "-c" "cd ${DIR_ROOT}/libraries/glew-cmake && git apply AGL_fix.patch")
-
 endif()
 
 # sdl2
