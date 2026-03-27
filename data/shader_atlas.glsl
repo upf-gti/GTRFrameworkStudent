@@ -171,7 +171,7 @@ void main()
 {
 	float n = u_camera_nearfar.x;
 	float f = u_camera_nearfar.y;
-	float z = texture2D(u_texture,v_uv).x;
+	float z = texture(u_texture,v_uv).x;
 	if( n == 0.0 && f == 1.0 )
 		FragColor = vec4(z);
 	else
