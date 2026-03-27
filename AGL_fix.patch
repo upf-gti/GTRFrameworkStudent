@@ -1,0 +1,15 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 8e92afa..3c11e61 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -118,8 +118,8 @@ endif()
+ 
+ # OS Specific dependencies
+ if(APPLE)
+-	find_library(AGL_LIBRARY AGL REQUIRED)
+-	list(APPEND LIBRARIES ${AGL_LIBRARY})
++	#find_library(AGL_LIBRARY AGL REQUIRED)
++	#list(APPEND LIBRARIES ${AGL_LIBRARY})
+ elseif(NOT WIN32)
+ 	if(GLEW_OSMESA)
+ 		find_library(OSMESA_LIBRARY OSMesa REQUIRED)
