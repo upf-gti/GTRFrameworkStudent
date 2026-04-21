@@ -20,6 +20,43 @@
 
 using namespace SCN;
 
+
+// Light intensity is part of the framework already somewhere. Same with color
+// Normal vector is important because we then know where the light hits the mesh (maybe even reflections)
+// Normalize a vectore ONLY if a value is a direction (COlor of the surface is a physical quantity, so we 
+// dont normalize that)
+// Dot product, to measure the difference between directions. (The higher, the closer is the direction) 
+// -> clamp negative values (because we dont compute negative light)
+// reflect -> order is important
+// Ambient contribution is the same for the whole scene, but not the others change for every pixel.
+// 
+// 
+// Be careful about OPENGL because it changes the global config
+// use the fixed pipeline of OPenGL for rendering a mesh
+// -> we are only changing code for the vertex shader and the fragment shader
+// 
+// Uniform we send with setUniform 
+// 
+// 
+// for phong implementation -> try to use float numbers at some point for computational and detail reasons
+// 
+// No attenuation fordirectional light but we are doing it for the L vector (use LightEntity's Front)
+// 
+// Take front vector and light vector. Cosine magic -> to determine the degree of the cone of light.
+// But we want it to be a bit diffused, for softer borders and a more realistic look hence we add another
+// parameter.-> alpha_max as full spotlight angle
+// alpha_min as heart of the cone of light
+// and inbetween the hard light and the soft light (alpha max vs. alpha min) we have the falloff)
+// 
+// Always make sure that you are using the same length in the arrays (for GPU purposes) 
+// 
+// Look at extra assignments for a better grade. 
+//
+
+
+
+
+
 //some globals
 GFX::Mesh sphere;
 
@@ -46,10 +83,45 @@ void Renderer::setupScene()
 		skybox_cubemap = nullptr;
 }
 
+// Also from class
+struct sRenderable
+{
+	GFX::Mesh* mesh;
+	SCN::Material* material;
+	Matrix44 model;
+	float distance;
+};
+
+std::vector<sRenderable> render_list;
+std::vector<sRenderable> opaque_list;
+std::vector<sRenderable> transparent_list;
+
+void parseNode(Node* node) {
+	if (!node) {
+		return;
+	}
+
+	// Push back is a very handy way to initialize structures and opjects
+	render_list.push_back({
+		.mesh = node->mesh,
+		.material = node->material,
+		.model = node->getGlobalMatrix()
+		});
+
+	for (Node* child : node->children) {
+		parseNode(child);
+	}
+}
+
+
 void Renderer::parseSceneEntities(SCN::Scene* scene, Camera* cam) {
 	// HERE =====================
 	// TODO: GENERATE RENDERABLES
 	// ==========================
+	render_list.clear();
+	opaque_list.clear();
+	transparent_list.clear();
+
 
 	for (int i = 0; i < scene->entities.size(); i++) {
 		BaseEntity* entity = scene->entities[i];
@@ -58,6 +130,17 @@ void Renderer::parseSceneEntities(SCN::Scene* scene, Camera* cam) {
 			continue;
 		}
 
+		// From Class!!
+		if (entity->getType() == eEntityType::PREFAB) {
+			//
+			PrefabEntity* e = (PrefabEntity*)entity;
+
+			parseNode(&(entity->root));
+
+			// Implement transparency here???
+		}
+
+
 		// Store Prefab Entitys
 		// ...
 		//		Store Children Prefab Entities
@@ -65,7 +148,23 @@ void Renderer::parseSceneEntities(SCN::Scene* scene, Camera* cam) {
 		// Store Lights
 		// ...
 	}
-	
+
+	// another for loop to implement our transprant and opaque lists.
+	for (sRenderable& r : render_list) {
+		// compute distance from camera to object using model translation
+		if (cam)
+			r.distance = r.model.getTranslation().distance(cam->eye);
+		else
+			r.distance = 0.0f;
+
+		// ALPHA cutout as opaque and BLEND as transparent
+		// If it is transparent, add it to transparent list, else opaque
+		if (r.material && r.material->isTransparent())
+			transparent_list.push_back(r);
+		else
+			opaque_list.push_back(r);
+	}
+
 }
 
 void Renderer::renderScene(SCN::Scene* scene, Camera* camera)
@@ -83,12 +182,39 @@ void Renderer::renderScene(SCN::Scene* scene, Camera* camera)
 	GFX::checkGLErrors();
 
 	//render skybox
-	if(skybox_cubemap)
+	if (skybox_cubemap)
 		renderSkybox(skybox_cubemap);
 
-	// HERE =====================
-	// TODO: RENDER RENDERABLES
-	// ==========================
+	// From class
+
+	// Global Bool masks
+	glEnable(GL_DEPTH_TEST);
+	glDepthMask(GL_TRUE);
+	glDisable(GL_BLEND);
+
+	// Opaque pass
+	for (sRenderable& call : opaque_list) {
+		renderMeshWithMaterial(call.model, call.mesh, call.material);
+	}
+
+	// If transparent, we sort the list the other way around, from furthest to less distance.
+	std::sort(transparent_list.begin(), transparent_list.end(),
+		[](const sRenderable& a, const sRenderable& b) {return a.distance > b.distance; });
+
+	glEnable(GL_DEPTH_TEST);
+	glDepthMask(GL_FALSE);
+	glEnable(GL_BLEND);
+	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+	for (const sRenderable& call : transparent_list) {
+		renderMeshWithMaterial(call.model, call.mesh, call.material);
+	}
+
+	// Restore defaults
+	glDepthMask(GL_TRUE);
+	glDisable(GL_BLEND);
+
+
 }
 
 
@@ -136,9 +262,9 @@ void Renderer::renderSkybox(GFX::Texture* cubemap)
 void Renderer::renderMeshWithMaterial(const Matrix44 model, GFX::Mesh* mesh, SCN::Material* material)
 {
 	//in case there is nothing to do
-	if (!mesh || !mesh->getNumVertices() || !material )
+	if (!mesh || !mesh->getNumVertices() || !material)
 		return;
-    assert(glGetError() == GL_NO_ERROR);
+	assert(glGetError() == GL_NO_ERROR);
 
 	//define locals to simplify coding
 	GFX::Shader* shader = NULL;
@@ -149,7 +275,7 @@ void Renderer::renderMeshWithMaterial(const Matrix44 model, GFX::Mesh* mesh, SCN
 	//chose a shader
 	shader = GFX::Shader::Get("texture");
 
-    assert(glGetError() == GL_NO_ERROR);
+	assert(glGetError() == GL_NO_ERROR);
 
 	//no shader? then nothing to render
 	if (!shader)
@@ -167,11 +293,11 @@ void Renderer::renderMeshWithMaterial(const Matrix44 model, GFX::Mesh* mesh, SCN
 
 	// Upload time, for cool shader effects
 	float t = getTime();
-	shader->setUniform("u_time", t );
+	shader->setUniform("u_time", t);
 
 	// Render just the verticies as a wireframe
 	if (render_wireframe)
-		glPolygonMode( GL_FRONT_AND_BACK, GL_LINE );
+		glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
 
 	//do the draw call that renders the mesh into the screen
 	mesh->render(GL_TRIANGLES);
@@ -180,15 +306,15 @@ void Renderer::renderMeshWithMaterial(const Matrix44 model, GFX::Mesh* mesh, SCN
 	shader->disable();
 
 	//set the render state as it was before to avoid problems with future renders
-	glDisable(GL_BLEND);
-	glPolygonMode( GL_FRONT_AND_BACK, GL_FILL );
+	//glDisable(GL_BLEND);
+	glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
 }
 
 #ifndef SKIP_IMGUI
 
 void Renderer::showUI()
 {
-		
+
 	ImGui::Checkbox("Wireframe", &render_wireframe);
 	ImGui::Checkbox("Boundaries", &render_boundaries);
 
