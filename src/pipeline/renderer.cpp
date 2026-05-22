@@ -406,6 +406,17 @@ void Renderer::renderGBuffer(Camera* camera)
 		if (call.material->two_sided) glDisable(GL_CULL_FACE);
 		else glEnable(GL_CULL_FACE);
 
+		//Passing heightmaps
+		GFX::Texture* height_tex = call.material->textures[SCN::eTextureChannel::HEIGHTMAP].texture;
+
+		// Use a pure black texture as a fallback if the material lacks a height map
+		if (!height_tex) {
+			height_tex = GFX::Texture::getBlackTexture();
+		}
+
+		shader->setUniform("depthMap", height_tex, 2); // Unit 2
+		shader->setUniform("height_scale", 0.05f);     // Match your visual preference
+
 		// Render the geometry
 		call.mesh->render(GL_TRIANGLES);
 	}
@@ -733,7 +744,7 @@ void Renderer::renderMeshWithMaterial(const Matrix44 model, GFX::Mesh* mesh, SCN
 	shader->setUniform("u_viewprojection", camera->viewprojection_matrix);
 	shader->setUniform("u_camera_position", camera->eye);
 
-	// --- FIX: Explicitly send texture toggle flags to the PBR shader ---
+	// Explicitly send texture toggle flags to the PBR shader
 	bool has_albedo = material->textures[SCN::eTextureChannel::ALBEDO].texture != nullptr;
 	bool has_normal = material->textures[SCN::eTextureChannel::NORMALMAP].texture != nullptr;
 	bool has_mr = material->textures[SCN::eTextureChannel::METALLIC_ROUGHNESS].texture != nullptr;
@@ -741,6 +752,19 @@ void Renderer::renderMeshWithMaterial(const Matrix44 model, GFX::Mesh* mesh, SCN
 	shader->setUniform("u_has_texture", has_albedo);
 	shader->setUniform("u_has_normal_map", has_normal);
 	shader->setUniform("u_has_metallic_roughness_map", has_mr);
+
+
+	//Passing heightmaps
+	GFX::Texture* height_tex = call.material->textures[SCN::eTextureChannel::HEIGHTMAP].texture;
+
+	// Use a pure black texture as a fallback if the material lacks a height map
+	if (!height_tex) {
+		height_tex = GFX::Texture::getBlackTexture();
+	}
+
+	shader->setUniform("depthMap", height_tex, 2); // Unit 2
+	shader->setUniform("height_scale", 0.05f);     // Match your visual preference
+
 
 	// 2. Bind the textures FIRST so we don't overwrite texture slot registers
 	material->bind(shader);

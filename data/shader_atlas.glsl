@@ -13,6 +13,7 @@ deferred quad.vs deferred.fs
 lightvolume basic.vs lightvolume.fs
 ssao quad.vs ssao.fs
 
+
 \pbr_math
 const float PI = 3.14159265359;
 
@@ -883,6 +884,8 @@ void main(){
 FragColor = vec4(0.0, 0.0, 0.0, 1.0);
 }
 
+
+
 \lighting_PBR.fs
 
 #version 330 core
@@ -918,6 +921,16 @@ uniform vec3 u_light_positions[MAX_LIGHTS];
 uniform vec3 u_light_directions[MAX_LIGHTS];
 uniform vec3 u_light_colors[MAX_LIGHTS];
 uniform float u_light_intensities[MAX_LIGHTS];
+
+//Parallel Occlusion Mapping Uniforms
+uniform sampler2D diffuseMap;
+uniform sampler2D normalMap;
+uniform sampler2D depthMap;
+uniform float height_scale;
+
+
+vec2 ParallaxMapping(vec2 texCoords, vec3 viewDir);
+
 
 // Output
 out vec4 FragColor;
@@ -978,9 +991,60 @@ mat3 cotangent_frame(vec3 N, vec3 p, vec2 uv) {
     return mat3(T * invmax, B * invmax, N);
 }
 
+//returns displaced texture coordinates
+vec2 ParallaxMapping(vec2 texCoords, vec3 viewDir)
+{ 
+      // number of depth layers
+    const float numLayers = 10;
+    // calculate the size of each layer
+    float layerDepth = 1.0 / numLayers;
+    // depth of current layer
+    float currentLayerDepth = 0.0;
+    // the amount to shift the texture coordinates per layer (from vector P)
+    vec2 P = viewDir.xy * height_scale; 
+    vec2 deltaTexCoords = P / numLayers;
+
+    vec2  currentTexCoords     = texCoords;
+    float currentDepthMapValue = texture(depthMap, currentTexCoords).r;
+  
+    while(currentLayerDepth < currentDepthMapValue)
+    {
+        // shift texture coordinates along direction of P
+        currentTexCoords -= deltaTexCoords;
+        // get depthmap value at current texture coordinates
+        currentDepthMapValue = texture(depthMap, currentTexCoords).r;  
+        // get depth of next layer
+        currentLayerDepth += layerDepth;  
+    }
+
+        // get texture coordinates before collision (reverse operations)
+    vec2 prevTexCoords = currentTexCoords + deltaTexCoords;
+
+    // get depth after and before collision for linear interpolation
+    float afterDepth  = currentDepthMapValue - currentLayerDepth;
+    float beforeDepth = texture(depthMap, prevTexCoords).r - currentLayerDepth + layerDepth;
+ 
+    // interpolation of texture coordinates
+    float weight = afterDepth / (afterDepth - beforeDepth);
+    vec2 finalTexCoords = prevTexCoords * weight + currentTexCoords * (1.0 - weight);
+
+    return finalTexCoords;  
+} 
+
+
 void main() {
+
+    //offset texture coordinates with Parallax Mapping
+    vec3 viewDir   = normalize(fs_in.TangentViewPos - fs_in.TangentFragPos);
+    vec2 texCoords = ParallaxMapping(fs_in.TexCoords,  viewDir);
+
+    //Prevent artifacts by discarding whenever samples outside the texture coordinates range
+    if(texCoords.x > 1.0 || texCoords.y > 1.0 || texCoords.x < 0.0 || texCoords.y < 0.0)
+    discard;
+
+
     // --- Step 1: Resolve Base Material Parameters ---
-    vec4 albedo_sample = u_has_texture ? texture(u_texture, v_uv) : vec4(1.0);
+    vec4 albedo_sample = u_has_texture ? texture(u_texture, texCoords) : vec4(1.0);
     vec4 albedo = albedo_sample * u_color;
     
     float ao = 1.0;
@@ -988,7 +1052,7 @@ void main() {
     float metallic = u_metallic_factor;
     
     if (u_has_metallic_roughness_map) {
-        vec3 mr_sample = texture(u_metallic_roughness_texture, v_uv).rgb;
+        vec3 mr_sample = texture(u_metallic_roughness_texture, texCoords).rgb;
         ao = mr_sample.r;
         roughness = mr_sample.g;
         metallic = mr_sample.b;
@@ -1000,7 +1064,7 @@ void main() {
     // --- Step 2: Set Up Normal & View Directions ---
     vec3 N = normalize(v_normal);
     if (u_has_normal_map) {
-        vec3 tangent_normal = texture(u_normal_texture, v_uv).xyz * 2.0 - 1.0;
+        vec3 tangent_normal = texture(u_normal_texture, texCoords).xyz * 2.0 - 1.0;
         mat3 TBN = cotangent_frame(N, v_position, v_uv);
         N = normalize(TBN * tangent_normal);
     }
@@ -1155,3 +1219,4 @@ void main() {
     float ao_factor = 1.0 - (occlusion / float(max(samples_checked, 1)));
     FragColor = clamp(ao_factor, 0.0, 1.0);
 }
+
