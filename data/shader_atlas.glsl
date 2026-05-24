@@ -923,13 +923,10 @@ uniform vec3 u_light_colors[MAX_LIGHTS];
 uniform float u_light_intensities[MAX_LIGHTS];
 
 //Parallel Occlusion Mapping Uniforms
-uniform sampler2D diffuseMap;
-uniform sampler2D normalMap;
-uniform sampler2D depthMap;
-uniform float height_scale;
+uniform sampler2D u_height_texture;
+uniform bool u_has_height_map;
+uniform float u_height_scale;
 
-
-vec2 ParallaxMapping(vec2 texCoords, vec3 viewDir);
 
 
 // Output
@@ -1001,18 +998,18 @@ vec2 ParallaxMapping(vec2 texCoords, vec3 viewDir)
     // depth of current layer
     float currentLayerDepth = 0.0;
     // the amount to shift the texture coordinates per layer (from vector P)
-    vec2 P = viewDir.xy * height_scale; 
+    vec2 P = viewDir.xy * u_height_scale; 
     vec2 deltaTexCoords = P / numLayers;
 
     vec2  currentTexCoords     = texCoords;
-    float currentDepthMapValue = texture(depthMap, currentTexCoords).r;
+    float currentDepthMapValue = texture(u_height_texture, currentTexCoords).r;
   
     while(currentLayerDepth < currentDepthMapValue)
     {
         // shift texture coordinates along direction of P
         currentTexCoords -= deltaTexCoords;
         // get depthmap value at current texture coordinates
-        currentDepthMapValue = texture(depthMap, currentTexCoords).r;  
+        currentDepthMapValue = texture(u_height_texture, currentTexCoords).r;  
         // get depth of next layer
         currentLayerDepth += layerDepth;  
     }
@@ -1022,7 +1019,7 @@ vec2 ParallaxMapping(vec2 texCoords, vec3 viewDir)
 
     // get depth after and before collision for linear interpolation
     float afterDepth  = currentDepthMapValue - currentLayerDepth;
-    float beforeDepth = texture(depthMap, prevTexCoords).r - currentLayerDepth + layerDepth;
+    float beforeDepth = texture(u_height_texture, prevTexCoords).r - currentLayerDepth + layerDepth;
  
     // interpolation of texture coordinates
     float weight = afterDepth / (afterDepth - beforeDepth);
@@ -1034,13 +1031,21 @@ vec2 ParallaxMapping(vec2 texCoords, vec3 viewDir)
 
 void main() {
 
-    //offset texture coordinates with Parallax Mapping
-    vec3 viewDir   = normalize(fs_in.TangentViewPos - fs_in.TangentFragPos);
-    vec2 texCoords = ParallaxMapping(fs_in.TexCoords,  viewDir);
+vec3 N = normalize(v_normal);
+//compute tangent V from cotangent_frame
+mat3 TBN = cotangent_frame(N, v_position, v_uv);
+vec3 V_world = normalize(u_camera_position - v_position);
+vec3 V_tangent = normalize(transpose(TBN) * V_world);
 
-    //Prevent artifacts by discarding whenever samples outside the texture coordinates range
-    if(texCoords.x > 1.0 || texCoords.y > 1.0 || texCoords.x < 0.0 || texCoords.y < 0.0)
-    discard;
+vec2 texCoords = v_uv;
+//Prevent artifacts by discarding whenever samples outside the texture coordinates range
+if (u_has_height_map) {
+    texCoords = ParallaxMapping(v_uv, V_tangent);
+    if (texCoords.x > 1.0 || texCoords.y > 1.0 ||
+        texCoords.x < 0.0 || texCoords.y < 0.0)
+        discard;
+}
+
 
 
     // --- Step 1: Resolve Base Material Parameters ---
@@ -1062,10 +1067,8 @@ void main() {
     metallic = clamp(metallic, 0.0, 1.0);
 
     // --- Step 2: Set Up Normal & View Directions ---
-    vec3 N = normalize(v_normal);
     if (u_has_normal_map) {
         vec3 tangent_normal = texture(u_normal_texture, texCoords).xyz * 2.0 - 1.0;
-        mat3 TBN = cotangent_frame(N, v_position, v_uv);
         N = normalize(TBN * tangent_normal);
     }
     

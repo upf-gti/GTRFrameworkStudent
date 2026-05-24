@@ -407,15 +407,13 @@ void Renderer::renderGBuffer(Camera* camera)
 		else glEnable(GL_CULL_FACE);
 
 		//Passing heightmaps
-		GFX::Texture* height_tex = call.material->textures[SCN::eTextureChannel::HEIGHTMAP].texture;
-
-		// Use a pure black texture as a fallback if the material lacks a height map
-		if (!height_tex) {
-			height_tex = GFX::Texture::getBlackTexture();
+		GFX::Texture* height_tex = call.material->textures[SCN::eTextureChannel::OCCLUSION].texture;
+		bool has_height = (height_tex != nullptr);
+		shader->setUniform("u_has_height_map", has_height);
+		if (has_height) {
+			shader->setUniform("u_height_texture", height_tex, 3);
+			shader->setUniform("u_height_scale", 0.05f);
 		}
-
-		shader->setUniform("depthMap", height_tex, 2); // Unit 2
-		shader->setUniform("height_scale", 0.05f);     // Match your visual preference
 
 		// Render the geometry
 		call.mesh->render(GL_TRIANGLES);
@@ -755,16 +753,7 @@ void Renderer::renderMeshWithMaterial(const Matrix44 model, GFX::Mesh* mesh, SCN
 
 
 	//Passing heightmaps
-	GFX::Texture* height_tex = call.material->textures[SCN::eTextureChannel::HEIGHTMAP].texture;
-
-	// Use a pure black texture as a fallback if the material lacks a height map
-	if (!height_tex) {
-		height_tex = GFX::Texture::getBlackTexture();
-	}
-
-	shader->setUniform("depthMap", height_tex, 2); // Unit 2
-	shader->setUniform("height_scale", 0.05f);     // Match your visual preference
-
+	shader->setUniform("u_height_scale", 0.05f); 
 
 	// 2. Bind the textures FIRST so we don't overwrite texture slot registers
 	material->bind(shader);
