@@ -322,7 +322,7 @@ vec2 ParallaxMapping(vec2 texCoords, vec3 viewDir)
     // depth of current layer
     float currentLayerDepth = 0.0;
     // the amount to shift the texture coordinates per layer (from vector P)
-    vec2 P = viewDir.xy * u_height_scale; 
+    vec2 P = (viewDir.xy / viewDir.z) * u_height_scale; 
     vec2 deltaTexCoords = P / numLayers;
 
     vec2  currentTexCoords     = texCoords;
@@ -365,7 +365,7 @@ void main()
         texCoords = ParallaxMapping(v_uv, V_tangent);
         if (texCoords.x > 1.0 || texCoords.y > 1.0 ||
             texCoords.x < 0.0 || texCoords.y < 0.0)
-            discard;
+            texCoords = clamp(texCoords, 0.001, 0.999); //Prevents holes in textures
     }
     
 	vec4 color = u_color * texture(u_texture, texCoords);

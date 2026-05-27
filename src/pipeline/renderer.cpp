@@ -412,7 +412,7 @@ void Renderer::renderGBuffer(Camera* camera)
 		shader->setUniform("u_has_height_map", has_height);
 		if (has_height) {
 			shader->setUniform("u_height_texture", height_tex, 3);
-			shader->setUniform("u_height_scale", 0.05f);
+			shader->setUniform("u_height_scale", 0.02f);
 		}
 
 		// Render the geometry
