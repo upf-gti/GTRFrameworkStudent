@@ -266,6 +266,7 @@ in vec3 v_world_position;
 in vec3 v_normal;
 in vec2 v_uv;
 in vec4 v_color;
+uniform vec3 u_camera_position;
 
 uniform vec4 u_color;
 uniform sampler2D u_texture;
@@ -278,6 +279,11 @@ uniform sampler2D u_metallic_roughness_texture;
 uniform int u_has_metallic_roughness_map;
 uniform float u_metallic_factor;
 uniform float u_roughness_factor;
+
+uniform sampler2D u_height_texture;
+uniform bool u_has_height_map;
+uniform float u_height_scale;
+
 
 layout(location = 0) out vec4 out_albedo;
 layout(location = 1) out vec4 out_perturbed_normal;
@@ -306,19 +312,72 @@ vec3 perturbNormal(vec3 N, vec3 WP, vec2 uv, vec3 normal_pixel)
 	return normalize(TBN * normal_pixel);
 }
 
+//returns displaced texture coordinates
+vec2 ParallaxMapping(vec2 texCoords, vec3 viewDir)
+{ 
+      // number of depth layers
+    const float numLayers = 10;
+    // calculate the size of each layer
+    float layerDepth = 1.0 / numLayers;
+    // depth of current layer
+    float currentLayerDepth = 0.0;
+    // the amount to shift the texture coordinates per layer (from vector P)
+    vec2 P = viewDir.xy * u_height_scale; 
+    vec2 deltaTexCoords = P / numLayers;
+
+    vec2  currentTexCoords     = texCoords;
+    float currentDepthMapValue = texture(u_height_texture, currentTexCoords).r;
+  
+    while(currentLayerDepth < currentDepthMapValue)
+    {
+        // shift texture coordinates along direction of P
+        currentTexCoords -= deltaTexCoords;
+        // get depthmap value at current texture coordinates
+        currentDepthMapValue = texture(u_height_texture, currentTexCoords).r;  
+        // get depth of next layer
+        currentLayerDepth += layerDepth;  
+    }
+
+        // get texture coordinates before collision (reverse operations)
+    vec2 prevTexCoords = currentTexCoords + deltaTexCoords;
+
+    // get depth after and before collision for linear interpolation
+    float afterDepth  = currentDepthMapValue - currentLayerDepth;
+    float beforeDepth = texture(u_height_texture, prevTexCoords).r - currentLayerDepth + layerDepth;
+ 
+    // interpolation of texture coordinates
+    float weight = afterDepth / (afterDepth - beforeDepth);
+    vec2 finalTexCoords = prevTexCoords * weight + currentTexCoords * (1.0 - weight);
+
+    return finalTexCoords;  
+    }
+
 void main()
 {
-	vec4 color = u_color * texture(u_texture, v_uv);
+	vec3 N_geo = normalize(v_normal);
+
+    mat3 TBN = cotangent_frame(N_geo, v_world_position, v_uv);
+    vec3 V_world = normalize(u_camera_position - v_world_position);
+    vec3 V_tangent = normalize(transpose(TBN) * V_world);
+
+    vec2 texCoords = v_uv;
+    if (u_has_height_map) {
+        texCoords = ParallaxMapping(v_uv, V_tangent);
+        if (texCoords.x > 1.0 || texCoords.y > 1.0 ||
+            texCoords.x < 0.0 || texCoords.y < 0.0)
+            discard;
+    }
+    
+	vec4 color = u_color * texture(u_texture, texCoords);
 	if (color.a < u_alpha_cutoff) discard;
 
-	vec3 N_geo = normalize(v_normal);
 	vec3 N_perturbed = N_geo;
 
 	if(u_has_normal_map != 0)
 	{
-		vec3 normal_pixel = texture(u_normal_texture, v_uv).xyz;
+		vec3 normal_pixel = texture(u_normal_texture, texCoords).xyz;
 		normal_pixel = normal_pixel * 2.0 - 1.0;
-		N_perturbed = perturbNormal(v_normal, v_world_position, v_uv, normal_pixel);
+		N_perturbed = perturbNormal(v_normal, v_world_position, texCoords, normal_pixel);
 	}
 
 	out_albedo = color;
@@ -330,7 +389,7 @@ void main()
     float metallic = u_metallic_factor;
 
     if (u_has_metallic_roughness_map != 0) {
-        vec3 mr_sample = texture(u_metallic_roughness_texture, v_uv).rgb;
+        vec3 mr_sample = texture(u_metallic_roughness_texture, texCoords).rgb;
         ao = mr_sample.r;         // R: baked ambient occlusion
         roughness = mr_sample.g;  // G: roughness
         metallic = mr_sample.b;   // B: metalness
