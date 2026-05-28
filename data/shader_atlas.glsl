@@ -316,13 +316,13 @@ vec3 perturbNormal(vec3 N, vec3 WP, vec2 uv, vec3 normal_pixel)
 vec2 ParallaxMapping(vec2 texCoords, vec3 viewDir)
 { 
       // number of depth layers
-    const float numLayers = 10;
+    float numLayers = mix(32.0, 8.0, abs(viewDir.z));
     // calculate the size of each layer
     float layerDepth = 1.0 / numLayers;
     // depth of current layer
     float currentLayerDepth = 0.0;
     // the amount to shift the texture coordinates per layer (from vector P)
-    vec2 P = (viewDir.xy / viewDir.z) * u_height_scale; 
+    vec2 P = (viewDir.xy / max(viewDir.z, 0.1)) * u_height_scale; 
     vec2 deltaTexCoords = P / numLayers;
 
     vec2  currentTexCoords     = texCoords;
@@ -362,10 +362,15 @@ void main()
 
     vec2 texCoords = v_uv;
     if (u_has_height_map) {
-        texCoords = ParallaxMapping(v_uv, V_tangent);
-        if (texCoords.x > 1.0 || texCoords.y > 1.0 ||
-            texCoords.x < 0.0 || texCoords.y < 0.0)
-            texCoords = clamp(texCoords, 0.001, 0.999); //Prevents holes in textures
+        vec2 parallaxUV = ParallaxMapping(v_uv, V_tangent);
+
+        //Dont clamp or discard, fall back to unsifted uv instead
+        if (parallaxUV.x >= 0.0 && parallaxUV.x <= 1.0 &&
+            parallaxUV.y >= 0.0 && parallaxUV.y <= 1.0)
+        {
+            texCoords = parallaxUV;
+        }
+        //else the texCoords stays as v_uv
     }
     
 	vec4 color = u_color * texture(u_texture, texCoords);
@@ -953,6 +958,7 @@ FragColor = vec4(0.0, 0.0, 0.0, 1.0);
 in vec3 v_position;
 in vec3 v_normal;
 in vec2 v_uv;
+in vec3 v_world_position; // ADD THIS
 
 // Camera and scene variables
 uniform vec3 u_camera_position;
@@ -1092,19 +1098,23 @@ void main() {
 
 vec3 N = normalize(v_normal);
 //compute tangent V from cotangent_frame
-mat3 TBN = cotangent_frame(N, v_position, v_uv);
-vec3 V_world = normalize(u_camera_position - v_position);
+mat3 TBN = cotangent_frame(N, v_world_position, v_uv);
+vec3 V_world = normalize(u_camera_position - v_world_position);
 vec3 V_tangent = normalize(transpose(TBN) * V_world);
 
 vec2 texCoords = v_uv;
 //Prevent artifacts by discarding whenever samples outside the texture coordinates range
 if (u_has_height_map) {
-    texCoords = ParallaxMapping(v_uv, V_tangent);
-    if (texCoords.x > 1.0 || texCoords.y > 1.0 ||
-        texCoords.x < 0.0 || texCoords.y < 0.0)
-        discard;
-}
+        vec2 parallaxUV = ParallaxMapping(v_uv, V_tangent);
 
+        //Dont clamp or discard, fall back to unsifted uv instead
+        if (parallaxUV.x >= 0.0 && parallaxUV.x <= 1.0 &&
+            parallaxUV.y >= 0.0 && parallaxUV.y <= 1.0)
+        {
+            texCoords = parallaxUV;
+        }
+        //else the texCoords stays as v_uv
+    }
 
 
     // --- Step 1: Resolve Base Material Parameters ---
@@ -1131,7 +1141,7 @@ if (u_has_height_map) {
         N = normalize(TBN * tangent_normal);
     }
     
-    vec3 V = normalize(u_camera_position - v_position);
+    vec3 V = normalize(u_camera_position - v_world_position);
     float NdotV = max(dot(N, V), 0.0);
 
     vec3 F0 = mix(vec3(0.04), albedo.rgb, metallic);
@@ -1143,13 +1153,13 @@ if (u_has_height_map) {
         float attenuation = 1.0;
 
         if (u_light_types[i] == 1) { // Point Light (Notice match with your C++ framework types!)
-            L = u_light_positions[i] - v_position;
+            L = u_light_positions[i] - v_world_position;
             float distance = length(L);
             L = normalize(L);
             attenuation = 1.0 / (distance * distance + 0.001);
         } 
         else if (u_light_types[i] == 2) { // Spot Light
-            L = u_light_positions[i] - v_position;
+            L = u_light_positions[i] - v_world_position;
             float distance = length(L);
             L = normalize(L);
             attenuation = 1.0 / (distance * distance + 0.001);
