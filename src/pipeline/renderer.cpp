@@ -100,8 +100,9 @@ Renderer::Renderer(const char* shader_atlas_filename, int width, int height)
 	gbuffer_fbo->create(width, height, 3, GL_RGBA, GL_UNSIGNED_BYTE, true);
 
 	// Light FBO
+	// HDR 3.2: changed GL_UNSIGNED_BYTE -> GL_HALF_FLOAT so HDR values above 1.0 are not clipped
 	light_fbo = new GFX::FBO();
-	light_fbo->create(width, height, 1, GL_RGBA, GL_UNSIGNED_BYTE, true);
+	light_fbo->create(width, height, 1, GL_RGBA, GL_HALF_FLOAT, true);
 	shadow_light_index = 1;
 
 	// 3.1 — Depth-only FBO, 1024x1024
@@ -240,8 +241,9 @@ void Renderer::renderDeferred(SCN::Scene* scene, Camera* camera)
 	renderLightVolumes(camera);
 	renderTransparencies(camera);
 
-	// Present accumulation frame buffer directly onto screen viewport
-	light_fbo->color_textures[0]->toViewport();
+	// HDR 3.3: replaced light_fbo->color_textures[0]->toViewport()
+	// with the tonemapping pass so HDR is mapped to LDR before display
+	renderTonemapping();
 }
 
 
@@ -552,6 +554,33 @@ void Renderer::renderTransparencies(Camera* camera)
 	light_fbo->unbind();
 }
 
+// HDR 3.3: new tonemapping pass — reads HDR light_fbo, outputs LDR to the backbuffer
+void Renderer::renderTonemapping()
+{
+	GFX::Shader* shader = GFX::Shader::Get("tonemapping");
+	if (!shader) {
+		// Fallback: if shader not found, blit directly as before
+		light_fbo->color_textures[0]->toViewport();
+		return;
+	}
+
+	// Write directly to the backbuffer (screen)
+	glBindFramebuffer(GL_FRAMEBUFFER, 0);
+	glClear(GL_COLOR_BUFFER_BIT);
+	glDisable(GL_DEPTH_TEST);
+	glDisable(GL_BLEND);
+
+	shader->enable();
+	shader->setUniform("u_hdr_texture", light_fbo->color_textures[0], 0);
+	shader->setUniform("u_exposure", exposure);
+
+	GFX::Mesh* quad = GFX::Mesh::getQuad();
+	quad->render(GL_TRIANGLES);
+
+	shader->disable();
+	glEnable(GL_DEPTH_TEST);
+}
+
 
 void Renderer::renderSkybox(GFX::Texture* cubemap)
 {
@@ -844,6 +873,11 @@ void Renderer::showUI()
 
 	ImGui::Checkbox("Front Face Culling", &shadow_front_face_culling);
 	ImGui::SliderInt("Shadow Light Index", &shadow_light_index, 0, 5);
+
+	// HDR 3.3: exposure control for the tonemapping pass
+	ImGui::Separator();
+	ImGui::Text("HDR Tonemapping");
+	ImGui::SliderFloat("Exposure", &exposure, 0.1f, 5.0f);
 
 	SCN::Material* mat = nullptr;
 

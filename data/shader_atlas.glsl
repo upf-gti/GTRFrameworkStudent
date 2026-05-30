@@ -300,7 +300,8 @@ uniform int u_cast_shadows[4];
 uniform float u_shadow_bias;
 
 out vec4 FragColor;
-
+vec3 degamma(vec3 c) { return pow(c, vec3(2.2)); }
+vec3 gamma(vec3 c)   { return pow(c, vec3(1.0 / 2.2)); }
 void main()
 {
 	float depth = texture(u_depth_texture, v_uv).x;
@@ -553,7 +554,8 @@ vec3 perturbNormal(vec3 N, vec3 WP, vec2 uv, vec3 normal_pixel)
 	mat3 TBN = cotangent_frame(N, WP, uv);
 	return normalize(TBN * normal_pixel);
 }
-
+vec3 degamma(vec3 c) { return pow(c, vec3(2.2)); }
+vec3 gamma(vec3 c)   { return pow(c, vec3(1.0 / 2.2)); }
 void main()
 {
 	// We prepare the vectors for Phong - N, V
@@ -788,7 +790,8 @@ vec3 perturbNormal(vec3 N, vec3 WP, vec2 uv, vec3 normal_pixel)
 	mat3 TBN = cotangent_frame(N, WP, uv);
 	return normalize(TBN * normal_pixel);
 }
-
+vec3 degamma(vec3 c) { return pow(c, vec3(2.2)); }
+vec3 gamma(vec3 c)   { return pow(c, vec3(1.0 / 2.2)); }
 
 void main()
 {
@@ -827,7 +830,7 @@ void main()
 
 	// Get base texture color
 	vec4 albedo_sample = texture(u_albedo_texture, v_uv);					// Getting color of the texture
-	vec3 albedo = albedo_sample.rgb * u_color.rgb;				// calculating base color
+	vec3 albedo = degamma(albedo_sample.rgb * u_color.rgb);
 
 	// Alpha test
 	if(albedo_sample.a * u_color.a < u_alpha_cutoff)
@@ -930,7 +933,7 @@ if(i < 4 && u_cast_shadows[i])
 
 
         // We multiply the lightenergy with shadow_factor
-        vec3 light_energy = u_light_colors[i] * u_light_intensities[i] * attenuation * shadow_factor;
+		vec3 light_energy = degamma(u_light_colors[i]) * u_light_intensities[i] * attenuation * shadow_factor;
 
 		// Diffuse (Lambert)
 		float NdotL = max(0.0, dot(N, L));
@@ -972,6 +975,6 @@ if(i < 4 && u_cast_shadows[i])
 
 			vec3 final_color = ambient + total_direct_light;
 
-		FragColor = vec4(final_color, albedo_sample.a * u_color.a);
+			FragColor = vec4(gamma(final_color), albedo_sample.a * u_color.a);
 
 }
