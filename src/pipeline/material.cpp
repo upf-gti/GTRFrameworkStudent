@@ -123,21 +123,27 @@ void Material::bind(GFX::Shader* shader) {
 
 		//MEtallic roughness
 		GFX::Texture* mr = textures[eTextureChannel::METALLIC_ROUGHNESS].texture;
-		if (mr)
+		bool has_mr_map = (mr != nullptr);
+		shader->setUniform("u_has_metallic_roughness_map", has_mr_map);
+		if (has_mr_map) {
 			shader->setUniform("u_metallic_roughness_texture", mr, 2);
-
-
-		// Get normal map texture
-		GFX::Texture* normal_texture = textures[SCN::eTextureChannel::NORMALMAP].texture;
-
-		// Boolean to check if normal map is used and give that to shader.
-		bool has_normal_map = (normal_texture != nullptr);
-		shader->setUniform("u_has_normal_map", has_normal_map);
-
-		// if there is a normal map, we set the normal texture.
-		if (has_normal_map) {
-			shader->setUniform("u_normal_texture", normal_texture, 1);
 		}
+		shader->setUniform("u_metallic_factor", metallic_factor);
+		shader->setUniform("u_roughness_factor", roughness_factor);
+
+		//Height map
+
+		//reads OCCLUSION slot,populated by loader from occlusionTexture):
+		GFX::Texture* height_map = textures[SCN::eTextureChannel::OCCLUSION].texture;
+		bool has_height = (height_map != nullptr);
+		if (has_height) {
+			shader->setUniform("u_height_texture", height_map, 3);
+			shader->setUniform("u_has_height_map", true);
+		}
+		else {
+			shader->setUniform("u_has_height_map", false);
+		}
+
 
 		// Pass shininess value to the shader
 		shader->setUniform("u_shininess", shininess);

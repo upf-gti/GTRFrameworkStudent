@@ -135,8 +135,9 @@
       "uri": "textures/unknown_normal.png"
     },
     {
-      "uri": "textures/unknown_baseColor.png"
-    }
+        "uri": "textures/unknown_baseColor.png"
+    },
+    { "uri": "textures/unknown_heightMap.png" }
   ],
   "materials": [
     {
@@ -153,8 +154,7 @@
         "texCoord": 0
       },
       "occlusionTexture": {
-        "index": 0,
-        "strength": 1,
+        "index": 3,
         "texCoord": 0
       },
       "pbrMetallicRoughness": {
@@ -318,8 +318,12 @@
       "source": 1
     },
     {
-      "sampler": 0,
-      "source": 2
+        "sampler": 0,
+        "source": 2
+    },
+    {
+        "sampler": 0,
+        "source": 3
     }
   ]
 }
