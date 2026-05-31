@@ -11,6 +11,7 @@ lighting_PBR basic.vs lighting_PBR.fs
 gbuffer basic.vs gbuffer.fs
 deferred quad.vs deferred.fs
 lightvolume basic.vs lightvolume.fs
+tonemapping quad.vs tonemapping.fs
 
 \perturbNormal
 // From https://github.com/glslify/glsl-perturb-normal/blob/master/cotangent-frame.glsl
@@ -229,6 +230,9 @@ uniform float u_alpha_cutoff;
 uniform sampler2D u_normal_texture;
 uniform int u_has_normal_map;
 
+// FIX: added u_roughness so we can pack it into the gbuffer
+uniform float u_roughness;
+
 layout(location = 0) out vec4 out_albedo;
 layout(location = 1) out vec4 out_perturbed_normal;
 layout(location = 2) out vec4 out_geometric_normal;
@@ -271,10 +275,12 @@ void main()
 		N_perturbed = perturbNormal(v_normal, v_world_position, v_uv, normal_pixel);
 	}
 
-	out_albedo = color;
+	// FIX: pack roughness into alpha channel so deferred.fs can read per-material shininess
+	out_albedo = vec4(color.rgb, u_roughness);
 	out_perturbed_normal = vec4(N_perturbed * 0.5 + 0.5, 1.0);
 	out_geometric_normal = vec4(N_geo * 0.5 + 0.5, 1.0);
 }
+
 \deferred.fs
 #version 330 core
 in vec2 v_uv;
@@ -302,12 +308,20 @@ uniform float u_shadow_bias;
 out vec4 FragColor;
 vec3 degamma(vec3 c) { return pow(c, vec3(2.2)); }
 vec3 gamma(vec3 c)   { return pow(c, vec3(1.0 / 2.2)); }
+
 void main()
 {
 	float depth = texture(u_depth_texture, v_uv).x;
 	if (depth >= 1.0) discard;
 
-	vec4 albedo = texture(u_color_texture, v_uv);
+	// FIX: unpack albedo (rgb) and roughness (alpha) from the same G-buffer target
+	vec4 albedo_sample = texture(u_color_texture, v_uv);
+	vec3 albedo = albedo_sample.rgb;
+	float roughness = albedo_sample.a;
+
+	// FIX: derive shininess from the per-material roughness stored in the gbuffer
+	float shininess = pow(2.0, (1.0 - roughness) * 10.0);
+	float spec_strength = 1.0 - roughness;
 	
 	vec3 N = normalize(texture(u_normal_texture, v_uv).xyz * 2.0 - 1.0);
 	vec3 N_geo = normalize(texture(u_geo_normal_texture, v_uv).xyz * 2.0 - 1.0);
@@ -319,12 +333,13 @@ void main()
 
 	vec3 V = normalize(u_camera_position - WP);
 
-	vec3 ambient = albedo.xyz * u_ambient_light;
+	vec3 ambient = albedo * u_ambient_light;
 	vec3 total_direct_light = vec3(0.0);
 
 	for (int i = 0; i < u_num_lights; i++)
 	{
 		vec3 L = normalize(u_light_directions[i] * -1.0);
+
 		float shadow_factor = 1.0;
 
 		// Directional shadow pass matching forward logic
@@ -353,14 +368,14 @@ void main()
 		vec3 light_energy = u_light_colors[i] * u_light_intensities[i] * shadow_factor;
 		vec3 diffuse = (NdotL * NdotL_geo) * light_energy;
 
-		float spec_strength = 0.5;
+		// FIX: use per-material shininess unpacked from the gbuffer instead of hardcoded 32.0
 		vec3 R = reflect(-L, N);
 		float RdotV = max(0.0, dot(R, V));
-		float spec_factor = pow(RdotV, 32.0);
+		float spec_factor = pow(RdotV, shininess);
 		
 		vec3 specular = (NdotL_geo > 0.0) ? (spec_factor * spec_strength * light_energy) : vec3(0.0);
 
-		total_direct_light += (diffuse * albedo.xyz) + specular;
+		total_direct_light += (diffuse * albedo) + specular;
 	}
 
 	FragColor = vec4(ambient + total_direct_light, 1.0);
@@ -398,7 +413,11 @@ void main()
 	float depth = texture(u_depth_texture, uv).x;
 	if (depth >= 1.0) discard;
 
-	vec4 albedo = texture(u_color_texture, uv);
+	// Unpack albedo rgb and roughness from alpha
+	vec4 albedo_sample = texture(u_color_texture, uv);
+	vec3 albedo = albedo_sample.rgb;
+	float roughness = albedo_sample.a;
+
 	vec3 N = normalize(texture(u_normal_texture, uv).xyz * 2.0 - 1.0);
 
 	vec4 screen_pos = vec4(uv * 2.0 - 1.0, depth * 2.0 - 1.0, 1.0);
@@ -444,7 +463,7 @@ void main()
 	float micro_shadow = clamp(NdotL * 4.0, 0.0, 1.0); 
 
 	vec3 light_energy = u_light_colors[0] * u_light_intensities[0] * attenuation * shadow_factor;
-	vec3 lighting = albedo.xyz * light_energy * NdotL * micro_shadow;
+	vec3 lighting = albedo * light_energy * NdotL * micro_shadow;
 
 	FragColor = vec4(lighting, 1.0);
 }
@@ -605,42 +624,40 @@ void main()
 
 		float shadow_factor = 1.0; // Standard: no shadow
 
-        // Calculating shadow
-if(i < 4 && u_cast_shadows[i] != 0)
-{
-    // Convert world space to homogeneous space
-    vec4 light_clip_pos =
-        u_light_viewprojections[i]
-        * vec4(v_world_position, 1.0);
+		// Calculating shadow
+		if(i < 4 && u_cast_shadows[i] != 0)
+		{
+			// Convert world space to homogeneous space
+			vec4 light_clip_pos =
+				u_light_viewprojections[i]
+				* vec4(v_world_position, 1.0);
 
-    // Perspective division
-    vec3 proj_coords =
-        light_clip_pos.xyz / light_clip_pos.w;
+			// Perspective division
+			vec3 proj_coords =
+				light_clip_pos.xyz / light_clip_pos.w;
 
-    // Transform from Clip Space [-1,1]
-    // to Texture Space [0,1]
-    proj_coords = proj_coords * 0.5 + 0.5;
+			// Transform from Clip Space [-1,1]
+			// to Texture Space [0,1]
+			proj_coords = proj_coords * 0.5 + 0.5;
 
-    // Only calculate when inside shadow map
-    if(proj_coords.x >= 0.0 && proj_coords.x <= 1.0 &&
-       proj_coords.y >= 0.0 && proj_coords.y <= 1.0)
-    {
-        float current_depth = proj_coords.z;
+			// Only calculate when inside shadow map
+			if(proj_coords.x >= 0.0 && proj_coords.x <= 1.0 &&
+			   proj_coords.y >= 0.0 && proj_coords.y <= 1.0)
+			{
+				float current_depth = proj_coords.z;
 
-        float closest_depth =
-            texture(
-                u_shadow_maps[i],
-                proj_coords.xy
-            ).r;
+				float closest_depth =
+					texture(
+						u_shadow_maps[i],
+						proj_coords.xy
+					).r;
 
-        
-
-        if(current_depth > closest_depth + u_shadow_bias)
-        {
-            shadow_factor = 0.0;
-        }
-    }
-}
+				if(current_depth > closest_depth + u_shadow_bias)
+				{
+					shadow_factor = 0.0;
+				}
+			}
+		}
 		
 		if(u_light_types[i] == 1) // Point light
 		{
@@ -681,8 +698,8 @@ if(i < 4 && u_cast_shadows[i] != 0)
 		}
 
 
-        // We multiply the lightenergy with shadow_factor
-        vec3 light_energy = u_light_colors[i] * u_light_intensities[i] * attenuation * shadow_factor;
+		// We multiply the lightenergy with shadow_factor
+		vec3 light_energy = u_light_colors[i] * u_light_intensities[i] * attenuation * shadow_factor;
 
 		// Diffuse (Lambert)
 		float NdotL = max(0.0, dot(N, L));
@@ -808,9 +825,7 @@ void main()
 		normal_pixel = normal_pixel * 2.0 - 1.0;
 
 		// Perturb the geometric normal_pixel
-		//N = perturbNormal(v_normal, v_world_position, v_uv, normal_pixel);
-		N = normalize(perturbNormal(N_geo, v_world_position, v_uv, normal_pixel)
-);
+		N = normalize(perturbNormal(N_geo, v_world_position, v_uv, normal_pixel));
 	}
 	
 	
@@ -834,7 +849,7 @@ void main()
 
 	// Alpha test
 	if(albedo_sample.a * u_color.a < u_alpha_cutoff)
-    discard;
+		discard;
 
 	// Ambient component 
 	vec3 ambient = albedo * 0.1; // 0.1 is adjustable but used for a low light.
@@ -856,42 +871,40 @@ void main()
 
 		float shadow_factor = 1.0; // Standard: no shadow
 
-        // Calculating shadow
-if(i < 4 && u_cast_shadows[i])
-{
-    // Convert world space to homogeneous space
-    vec4 light_clip_pos =
-        u_light_viewprojections[i]
-        * vec4(v_world_position, 1.0);
+		// Calculating shadow
+		if(i < 4 && u_cast_shadows[i])
+		{
+			// Convert world space to homogeneous space
+			vec4 light_clip_pos =
+				u_light_viewprojections[i]
+				* vec4(v_world_position, 1.0);
 
-    // Perspective division
-    vec3 proj_coords =
-        light_clip_pos.xyz / light_clip_pos.w;
+			// Perspective division
+			vec3 proj_coords =
+				light_clip_pos.xyz / light_clip_pos.w;
 
-    // Transform from Clip Space [-1,1]
-    // to Texture Space [0,1]
-    proj_coords = proj_coords * 0.5 + 0.5;
+			// Transform from Clip Space [-1,1]
+			// to Texture Space [0,1]
+			proj_coords = proj_coords * 0.5 + 0.5;
 
-    // Only calculate when inside shadow map
-    if(proj_coords.x >= 0.0 && proj_coords.x <= 1.0 &&
-       proj_coords.y >= 0.0 && proj_coords.y <= 1.0)
-    {
-        float current_depth = proj_coords.z;
+			// Only calculate when inside shadow map
+			if(proj_coords.x >= 0.0 && proj_coords.x <= 1.0 &&
+			   proj_coords.y >= 0.0 && proj_coords.y <= 1.0)
+			{
+				float current_depth = proj_coords.z;
 
-        float closest_depth =
-            texture(
-                u_shadow_maps[i],
-                proj_coords.xy
-            ).r;
+				float closest_depth =
+					texture(
+						u_shadow_maps[i],
+						proj_coords.xy
+					).r;
 
-        
-
-        if(current_depth > closest_depth + u_shadow_bias)
-        {
-            shadow_factor = 0.0;
-        }
-    }
-}
+				if(current_depth > closest_depth + u_shadow_bias)
+				{
+					shadow_factor = 0.0;
+				}
+			}
+		}
 		
 		if(u_light_types[i] == 1) // Point light
 		{
@@ -932,7 +945,7 @@ if(i < 4 && u_cast_shadows[i])
 		}
 
 
-        // We multiply the lightenergy with shadow_factor
+		// We multiply the lightenergy with shadow_factor
 		vec3 light_energy = degamma(u_light_colors[i]) * u_light_intensities[i] * attenuation * shadow_factor;
 
 		// Diffuse (Lambert)
@@ -971,10 +984,34 @@ if(i < 4 && u_cast_shadows[i])
 		vec3 diffuse_pbr = kd * albedo / 3.14159;
 
 		total_direct_light += (diffuse_pbr + specular) * light_energy * NdotL;
-		}
+	}
 
-			vec3 final_color = ambient + total_direct_light;
+	vec3 final_color = ambient + total_direct_light;
 
-			FragColor = vec4(gamma(final_color), albedo_sample.a * u_color.a);
+	FragColor = vec4(gamma(final_color), albedo_sample.a * u_color.a);
 
+}
+
+\tonemapping.fs
+// FIX: added missing tonemapping shader (renderer.cpp calls Get("tonemapping") but it wasn't in the atlas)
+#version 330 core
+
+in vec2 v_uv;
+
+uniform sampler2D u_hdr_texture;
+uniform float u_exposure;
+
+out vec4 FragColor;
+
+void main()
+{
+	vec3 hdr = texture(u_hdr_texture, v_uv).rgb;
+
+	// Exposure tone mapping
+	vec3 mapped = vec3(1.0) - exp(-hdr * u_exposure);
+
+	// Gamma correction
+	mapped = pow(mapped, vec3(1.0 / 2.2));
+
+	FragColor = vec4(mapped, 1.0);
 }

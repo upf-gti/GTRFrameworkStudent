@@ -97,7 +97,8 @@ Renderer::Renderer(const char* shader_atlas_filename, int width, int height)
 
 	// G-Buffer: color target 0 = albedo, color target 1 = packed normals
 	gbuffer_fbo = new GFX::FBO();
-	gbuffer_fbo->create(width, height, 3, GL_RGBA, GL_UNSIGNED_BYTE, true);
+	gbuffer_fbo->create(width, height, 3, GL_RGBA, GL_HALF_FLOAT, true);
+
 
 	// Light FBO
 	// HDR 3.2: changed GL_UNSIGNED_BYTE -> GL_HALF_FLOAT so HDR values above 1.0 are not clipped
@@ -349,6 +350,7 @@ void Renderer::renderGBuffer(Camera* camera)
 		shader->setUniform("u_color", call.material->color);
 		shader->setUniform("u_alpha_cutoff",
 			call.material->alpha_mode == SCN::eAlphaMode::MASK ? call.material->alpha_cutoff : 0.001f); //
+			    shader->setUniform("u_roughness", call.material->roughness_factor); // <-- ADD HERE
 
 		// 1. Bind the Albedo (Color) Texture to slot 0
 		GFX::Texture* albedo_tex = call.material->textures[SCN::eTextureChannel::ALBEDO].texture;
