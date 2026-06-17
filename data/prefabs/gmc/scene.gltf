@@ -289,32 +289,38 @@
       "uri": "scene.bin"
     }
   ],
-  "images": [
-    {
-      "uri": "textures/Material_33_emissive.png"
-    },
-    {
-      "uri": "textures/Material_33_metallicRoughness.png"
-    },
-    {
-      "uri": "textures/Material_33_normal.png"
-    },
-    {
-      "uri": "textures/Material_33_baseColor.png"
-    },
-    {
-      "uri": "textures/Material_34_baseColor.png"
-    },
-    {
-      "uri": "textures/Material_34_metallicRoughness.png"
-    },
-    {
-      "uri": "textures/Material_34_normal.png"
-    },
-    {
-      "uri": "textures/RootNode_baseColor.png"
-    }
-  ],
+    "images": [
+        {
+            "uri": "textures/Material_33_emissive.png"
+        },
+        {
+            "uri": "textures/Material_33_metallicRoughness.png"
+        },
+        {
+            "uri": "textures/Material_33_normal.png"
+        },
+        {
+            "uri": "textures/Material_33_baseColor.png"
+        },
+        {
+            "uri": "textures/Material_34_baseColor.png"
+        },
+        {
+            "uri": "textures/Material_34_metallicRoughness.png"
+        },
+        {
+            "uri": "textures/Material_34_normal.png"
+        },
+        {
+            "uri": "textures/RootNode_baseColor.png"
+        },
+        {
+            "uri": "textures/Material_33_heightMap.png"
+        },
+        {
+            "uri": "textures/Material_34_heightMap.png"
+        }
+    ],
   "materials": [
     {
       "alphaMode": "BLEND",
@@ -353,8 +359,7 @@
         "texCoord": 0
       },
       "occlusionTexture": {
-        "index": 1,
-        "strength": 1,
+        "index": 8,
         "texCoord": 0
       },
       "pbrMetallicRoughness": {
@@ -386,8 +391,7 @@
         "texCoord": 0
       },
       "occlusionTexture": {
-        "index": 5,
-        "strength": 1,
+        "index": 9,
         "texCoord": 0
       },
       "pbrMetallicRoughness": {
@@ -613,39 +617,47 @@
       ]
     }
   ],
-  "textures": [
-    {
-      "sampler": 0,
-      "source": 0
-    },
-    {
-      "sampler": 0,
-      "source": 1
-    },
-    {
-      "sampler": 0,
-      "source": 2
-    },
-    {
-      "sampler": 0,
-      "source": 3
-    },
-    {
-      "sampler": 0,
-      "source": 4
-    },
-    {
-      "sampler": 0,
-      "source": 5
-    },
-    {
-      "sampler": 0,
-      "source": 6
-    },
-    {
-      "sampler": 0,
-      "source": 7
-    }
-  ]
+    "textures": [
+        {
+            "sampler": 0,
+            "source": 0
+        },
+        {
+            "sampler": 0,
+            "source": 1
+        },
+        {
+            "sampler": 0,
+            "source": 2
+        },
+        {
+            "sampler": 0,
+            "source": 3
+        },
+        {
+            "sampler": 0,
+            "source": 4
+        },
+        {
+            "sampler": 0,
+            "source": 5
+        },
+        {
+            "sampler": 0,
+            "source": 6
+        },
+        {
+            "sampler": 0,
+            "source": 7
+        },
+        {
+            "sampler": 0,
+            "source": 8
+        },
+        {
+            "sampler": 0,
+            "source": 9
+        }
+    ]
 }
 

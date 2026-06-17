@@ -11,7 +11,7 @@ std::map<std::string, Material*> Material::sMaterials;
 uint32 Material::s_last_index = 0;
 Material Material::default_material;
 
-const char* SCN::texture_channel_str[] = { "ALBEDO","EMISSIVE","OPACITY","METALLIC_ROUGHNESS","OCCLUSION","NORMALMAP" };
+const char* SCN::texture_channel_str[] = { "ALBEDO","EMISSIVE","OPACITY","METALLIC_ROUGHNESS","OCCLUSION","NORMALMAP", "SHININESS"};
 
 
 Material* Material::Get(const char* name)
@@ -56,6 +56,8 @@ void Material::Release()
 	sMaterials.clear();
 }
 
+
+
 void Material::bind(GFX::Shader* shader) {
 	// First, configure the OpenGL state with the material settings =======================
 	{
@@ -79,8 +81,12 @@ void Material::bind(GFX::Shader* shader) {
 	}
 
 	// Bind the textures and set uniforms =======================
+	/* Before implementing Assignment 2, we are computing every texture with ALBEDO.
+	   Now we need to swtich for the metallic_roughness, the normal map and else.
+	*/
 	{
-		GFX::Texture* texture = textures[SCN::eTextureChannel::ALBEDO].texture;
+
+		GFX::Texture* albedo_texture = textures[SCN::eTextureChannel::ALBEDO].texture;
 
 		// HERE =====================
 		// TODO: Expand rfor the rest of materials (when you need to)
@@ -91,15 +97,70 @@ void Material::bind(GFX::Shader* shader) {
 		// ==========================
 
 		// We always force a default albedo texture
-		if (texture == NULL)
-			texture = GFX::Texture::getWhiteTexture(); //a 1x1 white texture
 
+		if (albedo_texture == NULL)
+			albedo_texture = GFX::Texture::getWhiteTexture(); //a 1x1 white texture
+
+		if (albedo_texture)
+			shader->setUniform("u_texture", albedo_texture, 0);
+
+		//Load Textures for PBR
+		// Currently overwriting older ids
+		//Albedo
+		GFX::Texture* albedo = textures[eTextureChannel::ALBEDO].texture;
+		if (!albedo) albedo = GFX::Texture::getWhiteTexture();
+
+		shader->setUniform("u_albedo_texture", albedo, 0);
+
+		//Normal
+		GFX::Texture* normal = textures[eTextureChannel::NORMALMAP].texture;
+		bool has_normal = (normal != nullptr);
+
+		shader->setUniform("u_has_normal_map", has_normal);
+
+		if (has_normal)
+			shader->setUniform("u_normal_texture", normal, 1);
+
+		//MEtallic roughness
+		GFX::Texture* mr = textures[eTextureChannel::METALLIC_ROUGHNESS].texture;
+		bool has_mr_map = (mr != nullptr);
+		shader->setUniform("u_has_metallic_roughness_map", has_mr_map);
+		if (has_mr_map) {
+			shader->setUniform("u_metallic_roughness_texture", mr, 2);
+		}
+		shader->setUniform("u_metallic_factor", metallic_factor);
+		shader->setUniform("u_roughness_factor", roughness_factor);
+
+		//Height map
+
+		//reads OCCLUSION slot,populated by loader from occlusionTexture):
+		GFX::Texture* height_map = textures[SCN::eTextureChannel::OCCLUSION].texture;
+		bool has_height = (height_map != nullptr);
+		if (has_height) {
+			shader->setUniform("u_height_texture", height_map, 3);
+			shader->setUniform("u_has_height_map", true);
+		}
+		else {
+			shader->setUniform("u_has_height_map", false);
+		}
+
+
+		// Pass shininess value to the shader
+		shader->setUniform("u_shininess", shininess);
+
+		// Color after normal map
 		shader->setUniform("u_color", color);
 
-		if (texture)
-			shader->setUniform("u_texture", texture, 0);
+		// We are adding the roughness here and adding it as a uniform to send it to our shader (Assignment 2)
+		shader->setUniform("u_roughness", roughness_factor);
 
 		// This is used to say which is the alpha threshold to what we should not paint a pixel on the screen (to cut polygons according to texture alpha)
 		shader->setUniform("u_alpha_cutoff", alpha_mode == SCN::eAlphaMode::MASK ? alpha_cutoff : 0.001f);
 	}
+}
+
+//Checks if Material is transparent
+bool Material::isTransparent() const
+{
+	return alpha_mode == SCN::eAlphaMode::BLEND;
 }
